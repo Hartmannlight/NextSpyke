@@ -1,0 +1,9 @@
+.idea/
+__pycache__/
+*.pyc
+.coverage
+.pytest_cache/
+pytest-cache-files-*/
+codex.exe
+*.log
+*.tmp

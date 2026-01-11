@@ -1,0 +1,203 @@
+{
+  "id": null,
+  "uid": "nextspyke-metrics",
+  "title": "NextSpyke Metrics",
+  "tags": ["nextspyke", "metrics", "observability"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "App Up",
+      "id": 1,
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "app_up",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Iterations Total",
+      "id": 2,
+      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
+      "targets": [
+        {
+          "expr": "app_iterations_total",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Failures Total",
+      "id": 3,
+      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
+      "targets": [
+        {
+          "expr": "app_iteration_failures_total",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Last Iteration (s ago)",
+      "id": 4,
+      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 0 },
+      "targets": [
+        {
+          "expr": "time() - app_last_iteration_timestamp_seconds",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Failure Rate (5m)",
+      "id": 5,
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(app_iteration_failures_total[5m])) / sum(rate(app_iterations_total[5m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Iterations per Minute",
+      "id": 6,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "rate(app_iterations_total[1m]) * 60",
+          "legendFormat": "iterations/min",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Failures per Minute",
+      "id": 7,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "rate(app_iteration_failures_total[1m]) * 60",
+          "legendFormat": "failures/min",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Iteration Duration (p50/p95/p99)",
+      "id": 8,
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 11 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(app_iteration_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(app_iteration_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(app_iteration_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Failures by Reason",
+      "id": 9,
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 18 },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(app_iteration_failure_reasons_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Build Info",
+      "id": 10,
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 25 },
+      "targets": [
+        {
+          "expr": "app_build_info",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "App Logs (errors)",
+      "id": 11,
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 31 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{service=\"app\"} |= \"error\" | line_format \"{{.ts}} {{.level}} {{.logger}} {{.event}} {{.msg}} {{.error}}\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "wrapLogMessage": true,
+        "showTime": true,
+        "enableLogDetails": true
+      }
+    },
+    {
+      "type": "logs",
+      "title": "App Logs (all)",
+      "id": 12,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 37 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{service=\"app\"} | line_format \"{{.ts}} {{.level}} {{.logger}} {{.event}} {{.msg}} {{.error}}\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "wrapLogMessage": true,
+        "showTime": true,
+        "enableLogDetails": true
+      }
+    }
+  ]
+}

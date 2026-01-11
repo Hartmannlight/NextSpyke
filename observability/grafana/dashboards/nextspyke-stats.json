@@ -1,0 +1,564 @@
+{
+  "id": null,
+  "uid": "nextspyke-stats",
+  "title": "NextSpyke Stats",
+  "tags": ["nextspyke", "stats", "analytics"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total Bikes",
+      "id": 1,
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM bike"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Active Bikes (15m)",
+      "id": 2,
+      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(DISTINCT bike_number) AS value FROM bike_status WHERE fetched_at >= NOW() - INTERVAL '15 minutes'"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Total Places",
+      "id": 3,
+      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM place"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Last Snapshot Age (s)",
+      "id": 4,
+      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (NOW() - MAX(fetched_at)))::int AS value FROM snapshot"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Trips Total",
+      "id": 5,
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM bike_movement"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Reserved Bikes (latest)",
+      "id": 23,
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(booked_bikes), 0) AS value FROM city_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM city_status)"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Available Bikes (latest)",
+      "id": 24,
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(available_bikes), 0) AS value FROM city_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM city_status)"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "In Use (estimated)",
+      "id": 25,
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "WITH latest AS (SELECT MAX(fetched_at) AS ts FROM bike_status), totals AS (SELECT COUNT(DISTINCT bike_number) AS total FROM bike_status bs JOIN latest l ON bs.fetched_at = l.ts), city AS (SELECT COALESCE(SUM(available_bikes), 0) AS available, COALESCE(SUM(booked_bikes), 0) AS booked FROM city_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM city_status)) SELECT GREATEST(totals.total - city.available - city.booked, 0) AS value FROM totals, city"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Inactive Bikes (latest)",
+      "id": 26,
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM bike_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM bike_status) AND active IS FALSE"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Booked Bikes Avg (30m)",
+      "id": 27,
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT ROUND(AVG(booked_bikes)::numeric, 2) AS value FROM city_status WHERE fetched_at >= NOW() - INTERVAL '30 minutes'"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Booked Bikes Max (30m)",
+      "id": 28,
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(MAX(booked_bikes), 0) AS value FROM city_status WHERE fetched_at >= NOW() - INTERVAL '30 minutes'"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Snapshots w/ Booked Bikes (30m)",
+      "id": 29,
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND(COUNT(*) FILTER (WHERE booked_bikes > 0)::numeric / COUNT(*) * 100, 2) END AS value FROM city_status WHERE fetched_at >= NOW() - INTERVAL '30 minutes'"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "decimals": 2 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Out of Service (active=false)",
+      "id": 30,
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM bike_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM bike_status) AND active IS FALSE"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Trips per Hour",
+      "id": 6,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(end_fetched_at, '1h') AS time, COUNT(*) AS value FROM bike_movement WHERE $__timeFilter(end_fetched_at) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg Trip Distance (m)",
+      "id": 7,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(end_fetched_at, '1h') AS time, AVG(distance_m) AS value FROM bike_movement WHERE $__timeFilter(end_fetched_at) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg Trip Duration (min)",
+      "id": 8,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 19 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(end_fetched_at, '1h') AS time, AVG(duration_seconds) / 60.0 AS value FROM bike_movement WHERE $__timeFilter(end_fetched_at) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "City Activity (bikes seen)",
+      "id": 9,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 19 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(hour, '1h') AS time, city_name AS metric, SUM(bikes_seen) AS value FROM mv_city_bikes_hourly WHERE $__timeFilter(hour) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "geomap",
+      "title": "Hotspots (last 24h)",
+      "id": 10,
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 26 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT p.lat AS latitude, p.lng AS longitude, p.name AS place, COUNT(DISTINCT bs.bike_number) AS value FROM bike_status bs JOIN place p ON p.place_uid = bs.place_uid WHERE bs.fetched_at >= NOW() - INTERVAL '24 hours' GROUP BY 1, 2, 3"
+        }
+      ],
+      "options": {
+        "view": {
+          "id": "coords",
+          "lat": 49.0069,
+          "lon": 8.4037,
+          "zoom": 12
+        },
+        "layers": [
+          {
+            "type": "heatmap",
+            "config": {
+              "weight": "value",
+              "radius": 20,
+              "blur": 15
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "barchart",
+      "title": "Activity by Hour of Day",
+      "id": 11,
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 26 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT EXTRACT(HOUR FROM fetched_at) AS hour, COUNT(DISTINCT bike_number) AS bikes_seen FROM bike_status WHERE $__timeFilter(fetched_at) GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "options": {
+        "xField": "hour",
+        "yField": "bikes_seen"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Top Routes",
+      "id": 12,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT start_place, end_place, trips, avg_distance_m, avg_duration_s FROM mv_routes_top ORDER BY trips DESC LIMIT 10"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Longest Dwell (bikes standing)",
+      "id": 13,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT bike_number, place_name, (dwell_seconds / 60) AS dwell_minutes FROM mv_bike_dwell ORDER BY dwell_seconds DESC LIMIT 20"
+        }
+      ]
+    },
+    {
+      "type": "barchart",
+      "title": "Trip Distance Distribution (m)",
+      "id": 14,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 43 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "WITH buckets AS (SELECT width_bucket(distance_m, 0, 10000, 10) AS bucket FROM bike_movement WHERE distance_m IS NOT NULL AND $__timeFilter(end_fetched_at)) SELECT (bucket - 1) * 1000 AS distance_m, COUNT(*) AS trips FROM buckets GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "options": {
+        "xField": "distance_m",
+        "yField": "trips"
+      }
+    },
+    {
+      "type": "barchart",
+      "title": "Trip Duration Distribution (s)",
+      "id": 15,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 43 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "WITH buckets AS (SELECT width_bucket(duration_seconds, 0, 3600, 12) AS bucket FROM bike_movement WHERE duration_seconds IS NOT NULL AND $__timeFilter(end_fetched_at)) SELECT (bucket - 1) * 300 AS duration_s, COUNT(*) AS trips FROM buckets GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "options": {
+        "xField": "duration_s",
+        "yField": "trips"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Snapshots per Hour",
+      "id": 16,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 50 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(fetched_at, '1h') AS time, COUNT(*) AS value FROM snapshot WHERE $__timeFilter(fetched_at) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Activity by Weekday/Hour",
+      "id": 17,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 50 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT EXTRACT(DOW FROM fetched_at) AS dow, EXTRACT(HOUR FROM fetched_at) AS hour, COUNT(DISTINCT bike_number) AS bikes_seen FROM bike_status WHERE $__timeFilter(fetched_at) GROUP BY 1, 2 ORDER BY 1, 2"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Start/End Bias (top net ends)",
+      "id": 18,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 57 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "WITH starts AS (SELECT start_place_uid, COUNT(*) AS starts FROM bike_movement WHERE $__timeFilter(end_fetched_at) GROUP BY 1), ends AS (SELECT end_place_uid, COUNT(*) AS ends FROM bike_movement WHERE $__timeFilter(end_fetched_at) GROUP BY 1) SELECT p.name AS place, COALESCE(s.starts, 0) AS starts, COALESCE(e.ends, 0) AS ends, (COALESCE(e.ends, 0) - COALESCE(s.starts, 0)) AS net FROM place p LEFT JOIN starts s ON s.start_place_uid = p.place_uid LEFT JOIN ends e ON e.end_place_uid = p.place_uid ORDER BY net DESC LIMIT 20"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Rebalancing Suspects",
+      "id": 19,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 57 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT bm.bike_number, bm.distance_m, bm.duration_seconds, ps.name AS start_place, pe.name AS end_place, bm.end_fetched_at FROM bike_movement bm LEFT JOIN place ps ON ps.place_uid = bm.start_place_uid LEFT JOIN place pe ON pe.place_uid = bm.end_place_uid WHERE bm.distance_m >= 1500 AND bm.duration_seconds <= 600 AND $__timeFilter(bm.end_fetched_at) ORDER BY bm.end_fetched_at DESC LIMIT 50"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Trips per Day",
+      "id": 20,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 65 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(end_fetched_at, '1d') AS time, COUNT(*) AS value FROM bike_movement WHERE $__timeFilter(end_fetched_at) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "OD Matrix (Top 50)",
+      "id": 21,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 65 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT start_place, end_place, trips, avg_distance_m, avg_duration_s FROM mv_routes_top ORDER BY trips DESC LIMIT 50"
+        }
+      ]
+    },
+    {
+      "type": "geomap",
+      "title": "Top Routes (Flow Map)",
+      "id": 22,
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 73 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT ST_AsGeoJSON(ST_MakeLine(bm.start_geom, bm.end_geom)) AS geojson, COUNT(*) AS trips FROM bike_movement bm WHERE bm.start_geom IS NOT NULL AND bm.end_geom IS NOT NULL AND $__timeFilter(bm.end_fetched_at) GROUP BY 1 ORDER BY trips DESC LIMIT 100"
+        }
+      ],
+      "options": {
+        "view": {
+          "id": "coords",
+          "lat": 49.0069,
+          "lon": 8.4037,
+          "zoom": 12
+        },
+        "layers": [
+          {
+            "type": "geojson",
+            "config": {
+              "showLegend": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "title": "Bike States (latest snapshot)",
+      "id": 31,
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 82 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(state, 'unknown') AS state, COUNT(*) AS bikes FROM bike_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM bike_status) GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Missing Snapshots (24h)",
+      "id": 32,
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 89 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(missing_count), 0) AS value FROM snapshot_gap WHERE gap_end >= NOW() - INTERVAL '24 hours'"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "stat",
+      "title": "Last Gap (s)",
+      "id": 33,
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 89 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(gap_seconds, 0) AS value FROM snapshot_gap ORDER BY gap_end DESC LIMIT 1"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Snapshot Gaps (max seconds)",
+      "id": 34,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 93 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroup(gap_end, '1h') AS time, MAX(gap_seconds) AS value FROM snapshot_gap WHERE $__timeFilter(gap_end) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Longest Snapshot Gaps",
+      "id": 35,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 93 },
+      "datasource": { "type": "postgres", "uid": "postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT gap_start, gap_end, gap_seconds, missing_count FROM snapshot_gap ORDER BY gap_seconds DESC LIMIT 20"
+        }
+      ]
+    }
+  ]
+}
