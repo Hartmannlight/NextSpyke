@@ -6,7 +6,7 @@ can explore usage patterns, hotspots, and city-level trends over time.
 ## Quick start
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 Defaults are set for Karlsruhe (`domain=fg`, `city_id=21`). Change via env vars in
@@ -18,7 +18,8 @@ Loki is available on `http://localhost:3100`.
 
 ## Docker (app + Postgres example)
 
-Use the published image from GHCR and a local Postgres instance:
+Use the published image from GHCR and a local Postgres instance. For reproducible
+deployments, prefer an immutable digest or immutable build tag over `latest`.
 
 ```yaml
 services:
@@ -54,7 +55,9 @@ services:
       POLL_INTERVAL_SECONDS: 60
       FETCH_ZONES: "true"
       STORE_RAW_JSON: "true"
+      MOVEMENT_MIN_DISTANCE_METERS: 10
       REFRESH_MV_INTERVAL_SECONDS: 300
+      REFRESH_MV_TIMEOUT_SECONDS: 30
       METRICS_ENABLED: "true"
       METRICS_PORT: 8000
     ports:
@@ -103,7 +106,9 @@ services:
       POLL_INTERVAL_SECONDS: 60
       FETCH_ZONES: "true"
       STORE_RAW_JSON: "true"
+      MOVEMENT_MIN_DISTANCE_METERS: 10
       REFRESH_MV_INTERVAL_SECONDS: 300
+      REFRESH_MV_TIMEOUT_SECONDS: 30
       METRICS_ENABLED: "true"
       METRICS_PORT: 8000
     ports:
@@ -197,7 +202,9 @@ If you already run your own instances, you can plug NextSpyke into them:
 - `FETCH_ZONES` (default `true`)
 - `FETCH_GBFS` (default `true`)
 - `STORE_RAW_JSON` (default `true`)
+- `MOVEMENT_MIN_DISTANCE_METERS` (default `10`, filters GPS noise for free bikes)
 - `REFRESH_MV_INTERVAL_SECONDS` (default `0`, set e.g. `300` to refresh materialized views)
+- `REFRESH_MV_TIMEOUT_SECONDS` (default `30`, limits each materialized-view statement)
 - `SERVICE_NAME` (default `nextspyke`)
 - `APP_ENV` (default `dev`)
 - `APP_VERSION` (default `0.1.0`)
@@ -235,6 +242,13 @@ Generate an HTML report:
 coverage html
 ```
 
+## Release and security policy
+
+- [Security release policy](docs/SECURITY_RELEASE_POLICY.md)
+- [Manual GitHub setup](docs/MANUAL_GITHUB_SETUP.md)
+- [Rollback procedure](docs/ROLLBACK.md)
+- [Security reporting](SECURITY.md)
+
 ## Schema changes and partitions
 
 The time-series tables are partitioned by `fetched_at`. If you already created the
@@ -254,4 +268,13 @@ REFRESH MATERIALIZED VIEW mv_hotspots_hourly;
 REFRESH MATERIALIZED VIEW mv_city_bikes_hourly;
 REFRESH MATERIALIZED VIEW mv_routes_top;
 REFRESH MATERIALIZED VIEW mv_bike_dwell;
+```
+
+## Movement backfill
+
+Rebuild missing movement rows from the stored bike sightings after changing the
+movement threshold or upgrading an existing database:
+
+```bash
+python -m nextspyke.app backfill-movements
 ```

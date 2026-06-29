@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import psycopg
@@ -82,7 +82,6 @@ class TestDbIntegration(unittest.TestCase):
         }
         city = {
             "uid": 21,
-            "domain": "fg",
             "name": "Karlsruhe",
             "alias": "karlsruhe",
             "lat": 49.0,
@@ -102,15 +101,123 @@ class TestDbIntegration(unittest.TestCase):
         }
         with self.conn.cursor() as cur:
             ingest.upsert_country(cur, country)
-            ingest.upsert_cities(cur, [city])
+            ingest.upsert_cities(cur, "fg", [city])
             ingest.upsert_places(cur, 21, [place])
             cur.execute("SELECT name FROM country WHERE domain = %s", ("fg",))
             self.assertEqual(cur.fetchone()[0], "KVV.nextbike")
             cur.execute("SELECT name FROM city WHERE city_uid = %s", (21,))
             self.assertEqual(cur.fetchone()[0], "Karlsruhe")
+            cur.execute("SELECT domain FROM city WHERE city_uid = %s", (21,))
+            self.assertEqual(cur.fetchone()[0], "fg")
             cur.execute("SELECT name FROM place WHERE place_uid = %s", (458,))
             self.assertEqual(cur.fetchone()[0], "Erbprinzenstr.")
         self.conn.commit()
+
+    def test_free_bike_coordinate_change_creates_movement(self):
+        fetched_at = datetime.now(timezone.utc)
+        next_fetched_at = fetched_at + timedelta(seconds=60)
+        city_uid = -910001
+        place_uid = -910001
+        bike_number = "integration-free-bike"
+        country = {"domain": "test-tracking", "name": "Tracking test"}
+        city = {
+            "uid": city_uid,
+            "name": "Tracking city",
+            "lat": 49.0,
+            "lng": 8.4,
+        }
+        start_place = {
+            "uid": place_uid,
+            "name": f"BIKE {bike_number}",
+            "spot": False,
+            "bike": True,
+            "lat": 49.0,
+            "lng": 8.4,
+        }
+        end_place = {**start_place, "lat": 49.001, "lng": 8.4}
+        try:
+            with self.conn.cursor() as cur:
+                db.ensure_partitions(cur, fetched_at)
+                ingest.upsert_country(cur, country)
+                ingest.upsert_cities(cur, country["domain"], [city])
+                ingest.upsert_places(cur, city_uid, [start_place])
+                ingest.upsert_bikes(
+                    cur,
+                    [(bike_number, None, None, True, ["frame_lock"], fetched_at, fetched_at)],
+                )
+                first_snapshot_id = ingest.insert_snapshot(
+                    cur,
+                    fetched_at,
+                    country["domain"],
+                    None,
+                )
+                ingest.insert_bike_status(
+                    cur,
+                    first_snapshot_id,
+                    [
+                        (
+                            first_snapshot_id,
+                            fetched_at,
+                            bike_number,
+                            place_uid,
+                            True,
+                            "ok",
+                            None,
+                            None,
+                            None,
+                            start_place["lng"],
+                            start_place["lat"],
+                        )
+                    ],
+                )
+                ingest.upsert_places(cur, city_uid, [end_place])
+                second_snapshot_id = ingest.insert_snapshot(
+                    cur,
+                    next_fetched_at,
+                    country["domain"],
+                    None,
+                )
+                ingest.insert_bike_status(
+                    cur,
+                    second_snapshot_id,
+                    [
+                        (
+                            second_snapshot_id,
+                            next_fetched_at,
+                            bike_number,
+                            place_uid,
+                            True,
+                            "ok",
+                            None,
+                            None,
+                            None,
+                            end_place["lng"],
+                            end_place["lat"],
+                        )
+                    ],
+                )
+
+                inserted = ingest.insert_bike_movements(
+                    cur,
+                    second_snapshot_id,
+                    next_fetched_at,
+                    10,
+                )
+                cur.execute(
+                    """
+                    SELECT movement_reason, distance_m
+                    FROM bike_movement
+                    WHERE bike_number = %s AND end_snapshot_id = %s
+                    """,
+                    (bike_number, second_snapshot_id),
+                )
+                movement = cur.fetchone()
+
+            self.assertEqual(inserted, 1)
+            self.assertEqual(movement[0], "coordinate_change")
+            self.assertGreaterEqual(movement[1], 100)
+        finally:
+            self.conn.rollback()
 
 
 if __name__ == "__main__":

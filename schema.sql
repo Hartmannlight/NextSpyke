@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS city (
   zoom INTEGER,
   bounds GEOMETRY(Polygon, 4326),
   refresh_rate_ms INTEGER,
-  website TEXT
+  website TEXT,
+  place_types JSONB,
+  return_to_official_only BOOLEAN
 );
 
 CREATE TABLE IF NOT EXISTS place (
@@ -60,7 +62,10 @@ CREATE TABLE IF NOT EXISTS vehicle_type (
   name TEXT,
   form_factor TEXT,
   propulsion_type TEXT,
-  max_range_meters INTEGER
+  max_range_meters INTEGER,
+  description TEXT,
+  rider_capacity INTEGER,
+  vehicle_image TEXT
 );
 
 CREATE TABLE IF NOT EXISTS bike (
@@ -130,6 +135,7 @@ CREATE TABLE IF NOT EXISTS place_status (
   free_racks INTEGER,
   special_racks INTEGER,
   free_special_racks INTEGER,
+  bike_types JSONB,
   PRIMARY KEY (snapshot_id, place_uid, fetched_at),
   FOREIGN KEY (snapshot_id, fetched_at) REFERENCES snapshot(snapshot_id, fetched_at)
 ) PARTITION BY RANGE (fetched_at);
@@ -145,6 +151,7 @@ CREATE TABLE IF NOT EXISTS bike_status (
   state TEXT,
   pedelec_battery INTEGER,
   battery_pack_pct INTEGER,
+  battery_range_km DOUBLE PRECISION,
   geom GEOMETRY(Point, 4326),
   PRIMARY KEY (snapshot_id, bike_number, fetched_at),
   FOREIGN KEY (snapshot_id, fetched_at) REFERENCES snapshot(snapshot_id, fetched_at)
@@ -167,10 +174,31 @@ CREATE TABLE IF NOT EXISTS bike_movement (
   duration_seconds INTEGER,
   is_station_to_station BOOLEAN,
   confidence SMALLINT,
+  movement_reason TEXT NOT NULL DEFAULT 'place_change',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE city
+  ADD COLUMN IF NOT EXISTS place_types JSONB,
+  ADD COLUMN IF NOT EXISTS return_to_official_only BOOLEAN;
+
+ALTER TABLE vehicle_type
+  ADD COLUMN IF NOT EXISTS description TEXT,
+  ADD COLUMN IF NOT EXISTS rider_capacity INTEGER,
+  ADD COLUMN IF NOT EXISTS vehicle_image TEXT;
+
+ALTER TABLE place_status
+  ADD COLUMN IF NOT EXISTS bike_types JSONB;
+
+ALTER TABLE bike_status
+  ADD COLUMN IF NOT EXISTS battery_range_km DOUBLE PRECISION;
+
+ALTER TABLE bike_movement
+  ADD COLUMN IF NOT EXISTS movement_reason TEXT NOT NULL DEFAULT 'place_change';
+
 CREATE INDEX IF NOT EXISTS idx_snapshot_fetched_at ON snapshot (fetched_at);
+CREATE INDEX IF NOT EXISTS idx_snapshot_domain_fetched_at
+  ON snapshot (domain, fetched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_snapshot_gap_end ON snapshot_gap (gap_end);
 CREATE INDEX IF NOT EXISTS idx_snapshot_gap_domain_end ON snapshot_gap (domain, gap_end);
 CREATE INDEX IF NOT EXISTS idx_bike_status_bike_time ON bike_status (bike_number, fetched_at);
@@ -210,6 +238,17 @@ GROUP BY 1, 2, 3;
 
 CREATE INDEX IF NOT EXISTS idx_mv_city_bikes_hourly ON mv_city_bikes_hourly (hour, city_uid);
 
+DO $$
+BEGIN
+  IF to_regclass('mv_routes_top') IS NOT NULL
+     AND POSITION(
+       'movement_reason' IN pg_get_viewdef('mv_routes_top'::regclass, TRUE)
+     ) = 0 THEN
+    DROP MATERIALIZED VIEW mv_routes_top;
+  END IF;
+END
+$$;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_routes_top AS
 SELECT
   bm.start_place_uid,
@@ -222,24 +261,26 @@ SELECT
 FROM bike_movement bm
 LEFT JOIN place ps ON ps.place_uid = bm.start_place_uid
 LEFT JOIN place pe ON pe.place_uid = bm.end_place_uid
+WHERE bm.movement_reason = 'place_change'
 GROUP BY 1, 2, 3, 4;
 
 CREATE INDEX IF NOT EXISTS idx_mv_routes_top ON mv_routes_top (trips DESC);
 
+DO $$
+BEGIN
+  IF to_regclass('mv_bike_dwell') IS NOT NULL
+     AND POSITION(
+       'bike_movement' IN pg_get_viewdef('mv_bike_dwell'::regclass, TRUE)
+     ) = 0 THEN
+    DROP MATERIALIZED VIEW mv_bike_dwell;
+  END IF;
+END
+$$;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_bike_dwell AS
-WITH ordered AS (
-  SELECT
-    bs.bike_number,
-    bs.place_uid,
-    bs.fetched_at,
-    LAG(bs.place_uid) OVER (PARTITION BY bs.bike_number ORDER BY bs.fetched_at) AS prev_place_uid
-  FROM bike_status bs
-),
-changes AS (
-  SELECT
-    bike_number,
-    MAX(fetched_at) FILTER (WHERE prev_place_uid IS NULL OR prev_place_uid <> place_uid) AS last_change_at
-  FROM ordered
+WITH last_movement AS (
+  SELECT bike_number, MAX(end_fetched_at) AS last_change_at
+  FROM bike_movement
   GROUP BY bike_number
 ),
 last_seen AS (
@@ -255,9 +296,12 @@ SELECT
   l.last_seen_at,
   l.last_place_uid AS place_uid,
   p.name AS place_name,
-  EXTRACT(EPOCH FROM (l.last_seen_at - c.last_change_at))::int AS dwell_seconds
+  EXTRACT(
+    EPOCH FROM (l.last_seen_at - COALESCE(m.last_change_at, b.first_seen_at))
+  )::int AS dwell_seconds
 FROM last_seen l
-JOIN changes c ON c.bike_number = l.bike_number
+JOIN bike b ON b.bike_number = l.bike_number
+LEFT JOIN last_movement m ON m.bike_number = l.bike_number
 LEFT JOIN place p ON p.place_uid = l.last_place_uid;
 
 CREATE INDEX IF NOT EXISTS idx_mv_bike_dwell ON mv_bike_dwell (dwell_seconds DESC);

@@ -15,7 +15,9 @@ class AppConfig:
     fetch_zones: bool
     fetch_gbfs: bool
     store_raw_json: bool
+    movement_min_distance_m: float
     refresh_mv_interval: int
+    refresh_mv_timeout: int
     gbfs_system_id: str
     metrics_enabled: bool
     metrics_port: int
@@ -61,7 +63,9 @@ def load_config() -> AppConfig:
     fetch_zones = env_bool("FETCH_ZONES", True)
     fetch_gbfs = env_bool("FETCH_GBFS", True)
     store_raw_json = env_bool("STORE_RAW_JSON", True)
+    movement_min_distance_m = float(os.getenv("MOVEMENT_MIN_DISTANCE_METERS", "10"))
     refresh_mv_interval = int(os.getenv("REFRESH_MV_INTERVAL_SECONDS", "0"))
+    refresh_mv_timeout = int(os.getenv("REFRESH_MV_TIMEOUT_SECONDS", "30"))
     gbfs_system_id = os.getenv("GBFS_SYSTEM_ID", f"nextbike_{domain}")
     metrics_enabled = env_bool("METRICS_ENABLED", False)
     metrics_port = int(os.getenv("METRICS_PORT", "8000"))
@@ -79,7 +83,9 @@ def load_config() -> AppConfig:
             "FETCH_ZONES": fetch_zones,
             "FETCH_GBFS": fetch_gbfs,
             "STORE_RAW_JSON": store_raw_json,
+            "MOVEMENT_MIN_DISTANCE_METERS": movement_min_distance_m,
             "REFRESH_MV_INTERVAL_SECONDS": refresh_mv_interval,
+            "REFRESH_MV_TIMEOUT_SECONDS": refresh_mv_timeout,
             "GBFS_SYSTEM_ID": gbfs_system_id,
             "METRICS_ENABLED": metrics_enabled,
             "METRICS_PORT": metrics_port,
@@ -104,7 +110,9 @@ def load_config() -> AppConfig:
         fetch_zones=fetch_zones,
         fetch_gbfs=fetch_gbfs,
         store_raw_json=store_raw_json,
+        movement_min_distance_m=movement_min_distance_m,
         refresh_mv_interval=refresh_mv_interval,
+        refresh_mv_timeout=refresh_mv_timeout,
         gbfs_system_id=gbfs_system_id,
         metrics_enabled=metrics_enabled,
         metrics_port=metrics_port,

@@ -15,8 +15,24 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "coverage==7.6.10",
+    "ruff (==0.15.20)",
 ]
 
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]
+"tests/*.py" = ["E402"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

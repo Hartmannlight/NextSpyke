@@ -8,9 +8,7 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from nextspyke.config import AppConfig
 
 APP_UP = Gauge("app_up", "1 while running, 0 once shutdown begins")
-APP_BUILD_INFO = Gauge(
-    "app_build_info", "Build info", ["version", "commit", "env", "service"]
-)
+APP_BUILD_INFO = Gauge("app_build_info", "Build info", ["version", "commit", "env", "service"])
 APP_ITERATIONS_TOTAL = Counter("app_iterations_total", "Number of ingest iterations")
 APP_LAST_ITERATION_TS = Gauge(
     "app_last_iteration_timestamp_seconds",

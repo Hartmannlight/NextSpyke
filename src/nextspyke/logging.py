@@ -19,6 +19,12 @@ def iso_ts(ts: datetime) -> str:
     return ts.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def _json_default(value: object) -> str:
+    if isinstance(value, datetime):
+        return iso_ts(value)
+    return str(value)
+
+
 def log_event(
     level: str,
     logger: str,
@@ -65,5 +71,5 @@ def log_event(
         record["exception_type"] = exc.__class__.__name__
         stack = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         record["stack"] = stack.replace("\n", "\\n")
-    sys.stdout.write(json.dumps(record, separators=(",", ":")) + "\n")
+    sys.stdout.write(json.dumps(record, separators=(",", ":"), default=_json_default) + "\n")
     sys.stdout.flush()

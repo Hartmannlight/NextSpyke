@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import psycopg
+from psycopg import sql
 from psycopg.types.json import Json
 
 from nextspyke.config import AppConfig
@@ -34,17 +35,43 @@ def fetch_json(url: str, params: dict | None = None) -> dict:
     return json.loads(payload)
 
 
-def maybe_refresh_materialized_views(conn: psycopg.Connection, now: datetime, interval: int) -> None:
+def maybe_refresh_materialized_views(
+    conn: psycopg.Connection,
+    now: datetime,
+    interval: int,
+    timeout: int,
+) -> None:
     global _last_mv_refresh_at
     if interval <= 0:
         return
     if _last_mv_refresh_at and (now - _last_mv_refresh_at).total_seconds() < interval:
         return
-    with conn.cursor() as cur:
-        for view in MATERIALIZED_VIEWS:
-            cur.execute(f"REFRESH MATERIALIZED VIEW {view}")
-    conn.commit()
+    with conn.transaction():
+        with conn.cursor() as cur:
+            if timeout > 0:
+                cur.execute(
+                    "SELECT set_config('statement_timeout', %s, true)",
+                    (f"{timeout}s",),
+                )
+            for view in MATERIALIZED_VIEWS:
+                cur.execute(sql.SQL("REFRESH MATERIALIZED VIEW {}").format(sql.Identifier(view)))
     _last_mv_refresh_at = now
+
+
+def log_optional_failure(config: AppConfig, source: str, exc: BaseException) -> None:
+    log_event(
+        "warn",
+        "ingest",
+        "Optional ingest step failed",
+        event="optional_ingest_failed",
+        config=config,
+        extra={"optional_source": source},
+        exc=exc,
+    )
+
+
+def is_connection_failure(exc: BaseException) -> bool:
+    return isinstance(exc, (psycopg.OperationalError, psycopg.InterfaceError))
 
 
 def upsert_country(cur: psycopg.Cursor, country: dict) -> None:
@@ -89,7 +116,7 @@ def upsert_country(cur: psycopg.Cursor, country: dict) -> None:
     )
 
 
-def upsert_cities(cur: psycopg.Cursor, cities: list[dict]) -> None:
+def upsert_cities(cur: psycopg.Cursor, domain: str, cities: list[dict]) -> None:
     for city in cities:
         bounds = city.get("bounds") or {}
         sw = bounds.get("south_west") or {}
@@ -103,9 +130,10 @@ def upsert_cities(cur: psycopg.Cursor, cities: list[dict]) -> None:
         cur.execute(
             f"""
             INSERT INTO city (
-                city_uid, domain, name, alias, lat, lng, zoom, bounds, refresh_rate_ms, website
+                city_uid, domain, name, alias, lat, lng, zoom, bounds, refresh_rate_ms, website,
+                place_types, return_to_official_only
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, {bounds_sql}, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, {bounds_sql}, %s, %s, %s, %s)
             ON CONFLICT (city_uid) DO UPDATE SET
                 domain = EXCLUDED.domain,
                 name = EXCLUDED.name,
@@ -115,11 +143,13 @@ def upsert_cities(cur: psycopg.Cursor, cities: list[dict]) -> None:
                 zoom = EXCLUDED.zoom,
                 bounds = EXCLUDED.bounds,
                 refresh_rate_ms = EXCLUDED.refresh_rate_ms,
-                website = EXCLUDED.website
+                website = EXCLUDED.website,
+                place_types = EXCLUDED.place_types,
+                return_to_official_only = EXCLUDED.return_to_official_only
             """,
             (
                 city.get("uid"),
-                city.get("domain"),
+                city.get("domain") or domain,
                 city.get("name"),
                 city.get("alias"),
                 city.get("lat"),
@@ -128,6 +158,8 @@ def upsert_cities(cur: psycopg.Cursor, cities: list[dict]) -> None:
                 *bounds_args,
                 int(city.get("refresh_rate") or 0) or None,
                 city.get("website"),
+                Json(city.get("place_types") or {}),
+                city.get("return_to_official_only"),
             ),
         )
 
@@ -219,7 +251,7 @@ def upsert_bikes(cur: psycopg.Cursor, bikes: list[tuple]) -> None:
         )
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (bike_number) DO UPDATE SET
-            boardcomputer = COALESCE(bike.boardcomputer, EXCLUDED.boardcomputer),
+            boardcomputer = COALESCE(EXCLUDED.boardcomputer, bike.boardcomputer),
             bike_type_id = COALESCE(EXCLUDED.bike_type_id, bike.bike_type_id),
             electric_lock = COALESCE(EXCLUDED.electric_lock, bike.electric_lock),
             lock_types = COALESCE(EXCLUDED.lock_types, bike.lock_types),
@@ -269,6 +301,7 @@ def insert_place_status(
                 place.get("free_racks"),
                 place.get("special_racks"),
                 place.get("free_special_racks"),
+                Json(place.get("bike_types") or {}),
             )
         )
     if rows:
@@ -276,27 +309,25 @@ def insert_place_status(
             """
             INSERT INTO place_status (
                 snapshot_id, fetched_at, place_uid, booked_bikes, bikes, bikes_available_to_rent,
-                bike_racks, free_racks, special_racks, free_special_racks
+                bike_racks, free_racks, special_racks, free_special_racks, bike_types
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             rows,
         )
 
 
-def insert_bike_status(
-    cur: psycopg.Cursor, snapshot_id: int, bike_rows: list[tuple]
-) -> None:
+def insert_bike_status(cur: psycopg.Cursor, snapshot_id: int, bike_rows: list[tuple]) -> None:
     if not bike_rows:
         return
     cur.executemany(
         """
         INSERT INTO bike_status (
             snapshot_id, fetched_at, bike_number, place_uid, active, state, pedelec_battery,
-            battery_pack_pct, geom
+            battery_pack_pct, battery_range_km, geom
         )
         VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s,
             ST_SetSRID(ST_MakePoint(%s, %s), 4326)
         )
         """,
@@ -304,7 +335,9 @@ def insert_bike_status(
     )
 
 
-def insert_snapshot(cur: psycopg.Cursor, fetched_at: datetime, domain: str, raw_json: dict | None) -> int:
+def insert_snapshot(
+    cur: psycopg.Cursor, fetched_at: datetime, domain: str, raw_json: dict | None
+) -> int:
     cur.execute(
         """
         INSERT INTO snapshot (fetched_at, domain, source, raw_json)
@@ -359,7 +392,12 @@ def record_snapshot_gap(
     }
 
 
-def insert_bike_movements(cur: psycopg.Cursor, snapshot_id: int, fetched_at: datetime) -> int:
+def insert_bike_movements(
+    cur: psycopg.Cursor,
+    snapshot_id: int,
+    fetched_at: datetime,
+    min_distance_m: float,
+) -> int:
     cur.execute(
         """
         WITH current AS (
@@ -378,6 +416,27 @@ def insert_bike_movements(cur: psycopg.Cursor, snapshot_id: int, fetched_at: dat
             JOIN current c ON c.bike_number = bs.bike_number
             WHERE NOT (bs.snapshot_id = %s AND bs.fetched_at = %s)
             ORDER BY bs.bike_number, bs.fetched_at DESC
+        ),
+        pairs AS (
+            SELECT
+                c.bike_number,
+                p.snapshot_id AS start_snapshot_id,
+                p.fetched_at AS start_fetched_at,
+                c.snapshot_id AS end_snapshot_id,
+                c.fetched_at AS end_fetched_at,
+                p.place_uid AS start_place_uid,
+                c.place_uid AS end_place_uid,
+                p.geom AS start_geom,
+                c.geom AS end_geom,
+                ROUND(ST_Distance(p.geom::geography, c.geom::geography))::int AS distance_m,
+                ps.spot AS start_spot,
+                pe.spot AS end_spot
+            FROM current c
+            JOIN prev p ON p.bike_number = c.bike_number
+            LEFT JOIN place ps ON ps.place_uid = p.place_uid
+            LEFT JOIN place pe ON pe.place_uid = c.place_uid
+            WHERE c.place_uid IS NOT NULL
+              AND p.place_uid IS NOT NULL
         )
         INSERT INTO bike_movement (
             bike_number,
@@ -392,32 +451,128 @@ def insert_bike_movements(cur: psycopg.Cursor, snapshot_id: int, fetched_at: dat
             distance_m,
             duration_seconds,
             is_station_to_station,
-            confidence
+            confidence,
+            movement_reason
         )
         SELECT
-            c.bike_number,
-            p.snapshot_id,
-            p.fetched_at,
-            c.snapshot_id,
-            c.fetched_at,
-            p.place_uid,
-            c.place_uid,
-            p.geom,
-            c.geom,
-            ROUND(ST_Distance(p.geom::geography, c.geom::geography))::int,
-            GREATEST(EXTRACT(EPOCH FROM c.fetched_at - p.fetched_at)::int, 0),
-            CASE WHEN ps.spot IS TRUE AND pe.spot IS TRUE THEN TRUE ELSE FALSE END,
-            CASE WHEN ps.spot IS TRUE AND pe.spot IS TRUE THEN 100 ELSE 50 END
-        FROM current c
-        JOIN prev p ON p.bike_number = c.bike_number
-        LEFT JOIN place ps ON ps.place_uid = p.place_uid
-        LEFT JOIN place pe ON pe.place_uid = c.place_uid
-        WHERE c.place_uid IS NOT NULL
-          AND p.place_uid IS NOT NULL
-          AND c.place_uid <> p.place_uid
+            bike_number,
+            start_snapshot_id,
+            start_fetched_at,
+            end_snapshot_id,
+            end_fetched_at,
+            start_place_uid,
+            end_place_uid,
+            start_geom,
+            end_geom,
+            distance_m,
+            GREATEST(EXTRACT(EPOCH FROM end_fetched_at - start_fetched_at)::int, 0),
+            start_spot IS TRUE AND end_spot IS TRUE,
+            CASE
+                WHEN start_spot IS TRUE AND end_spot IS TRUE THEN 100
+                WHEN start_place_uid <> end_place_uid THEN 75
+                ELSE 60
+            END,
+            CASE
+                WHEN start_place_uid <> end_place_uid THEN 'place_change'
+                ELSE 'coordinate_change'
+            END
+        FROM pairs
+        WHERE start_place_uid <> end_place_uid
+           OR (
+                start_place_uid = end_place_uid
+                AND start_spot IS NOT TRUE
+                AND distance_m >= %s
+           )
         ON CONFLICT DO NOTHING
         """,
-        (snapshot_id, fetched_at, snapshot_id, fetched_at),
+        (snapshot_id, fetched_at, snapshot_id, fetched_at, min_distance_m),
+    )
+    return cur.rowcount or 0
+
+
+def backfill_bike_movements(cur: psycopg.Cursor, min_distance_m: float) -> int:
+    cur.execute(
+        """
+        WITH ordered AS (
+            SELECT
+                bs.bike_number,
+                bs.snapshot_id AS end_snapshot_id,
+                bs.fetched_at AS end_fetched_at,
+                bs.place_uid AS end_place_uid,
+                bs.geom AS end_geom,
+                LAG(bs.snapshot_id) OVER sighting AS start_snapshot_id,
+                LAG(bs.fetched_at) OVER sighting AS start_fetched_at,
+                LAG(bs.place_uid) OVER sighting AS start_place_uid,
+                LAG(bs.geom) OVER sighting AS start_geom
+            FROM bike_status bs
+            WINDOW sighting AS (
+                PARTITION BY bs.bike_number
+                ORDER BY bs.fetched_at, bs.snapshot_id
+            )
+        ),
+        pairs AS (
+            SELECT
+                o.*,
+                ROUND(
+                    ST_Distance(o.start_geom::geography, o.end_geom::geography)
+                )::int AS distance_m,
+                ps.spot AS start_spot,
+                pe.spot AS end_spot
+            FROM ordered o
+            LEFT JOIN place ps ON ps.place_uid = o.start_place_uid
+            LEFT JOIN place pe ON pe.place_uid = o.end_place_uid
+            WHERE o.start_snapshot_id IS NOT NULL
+              AND o.start_place_uid IS NOT NULL
+              AND o.end_place_uid IS NOT NULL
+        )
+        INSERT INTO bike_movement (
+            bike_number,
+            start_snapshot_id,
+            start_fetched_at,
+            end_snapshot_id,
+            end_fetched_at,
+            start_place_uid,
+            end_place_uid,
+            start_geom,
+            end_geom,
+            distance_m,
+            duration_seconds,
+            is_station_to_station,
+            confidence,
+            movement_reason
+        )
+        SELECT
+            bike_number,
+            start_snapshot_id,
+            start_fetched_at,
+            end_snapshot_id,
+            end_fetched_at,
+            start_place_uid,
+            end_place_uid,
+            start_geom,
+            end_geom,
+            distance_m,
+            GREATEST(EXTRACT(EPOCH FROM end_fetched_at - start_fetched_at)::int, 0),
+            start_spot IS TRUE AND end_spot IS TRUE,
+            CASE
+                WHEN start_spot IS TRUE AND end_spot IS TRUE THEN 100
+                WHEN start_place_uid <> end_place_uid THEN 75
+                ELSE 60
+            END,
+            CASE
+                WHEN start_place_uid <> end_place_uid THEN 'place_change'
+                ELSE 'coordinate_change'
+            END
+        FROM pairs
+        WHERE start_place_uid <> end_place_uid
+           OR (
+                start_place_uid = end_place_uid
+                AND start_spot IS NOT TRUE
+                AND distance_m >= %s
+           )
+        ON CONFLICT DO NOTHING
+        """,
+        (min_distance_m,),
     )
     return cur.rowcount or 0
 
@@ -474,6 +629,9 @@ def upsert_vehicle_type_metadata(cur: psycopg.Cursor, vehicle_types: list[dict])
                 item.get("form_factor"),
                 item.get("propulsion_type"),
                 item.get("max_range_meters"),
+                item.get("_description"),
+                item.get("rider_capacity"),
+                item.get("vehicle_image"),
             )
         )
     if not rows:
@@ -481,17 +639,74 @@ def upsert_vehicle_type_metadata(cur: psycopg.Cursor, vehicle_types: list[dict])
     cur.executemany(
         """
         INSERT INTO vehicle_type (
-            vehicle_type_id, name, form_factor, propulsion_type, max_range_meters
+            vehicle_type_id, name, form_factor, propulsion_type, max_range_meters,
+            description, rider_capacity, vehicle_image
         )
-        VALUES (%s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (vehicle_type_id) DO UPDATE SET
             name = COALESCE(EXCLUDED.name, vehicle_type.name),
             form_factor = COALESCE(EXCLUDED.form_factor, vehicle_type.form_factor),
             propulsion_type = COALESCE(EXCLUDED.propulsion_type, vehicle_type.propulsion_type),
-            max_range_meters = COALESCE(EXCLUDED.max_range_meters, vehicle_type.max_range_meters)
+            max_range_meters = COALESCE(EXCLUDED.max_range_meters, vehicle_type.max_range_meters),
+            description = COALESCE(EXCLUDED.description, vehicle_type.description),
+            rider_capacity = COALESCE(EXCLUDED.rider_capacity, vehicle_type.rider_capacity),
+            vehicle_image = COALESCE(EXCLUDED.vehicle_image, vehicle_type.vehicle_image)
         """,
         rows,
     )
+
+
+def refresh_zone_metadata(conn: psycopg.Connection, config: AppConfig) -> None:
+    if not config.fetch_zones or not config.city_id:
+        return
+    sources = (
+        (
+            "zone-service",
+            ZONE_BASE_URL.format(city_id=config.city_id),
+        ),
+        (
+            "flexzone",
+            FLEXZONE_URL.format(domain=config.domain),
+        ),
+    )
+    for source, url in sources:
+        try:
+            data = fetch_json(url)
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    upsert_zone_features(cur, config.city_id, source, data)
+        except Exception as exc:
+            log_optional_failure(config, source, exc)
+            if is_connection_failure(exc):
+                raise
+
+
+def refresh_vehicle_type_metadata(conn: psycopg.Connection, config: AppConfig) -> None:
+    if not config.fetch_gbfs:
+        return
+    try:
+        vehicle_types = fetch_gbfs_vehicle_types(config.gbfs_system_id)
+        with conn.transaction():
+            with conn.cursor() as cur:
+                upsert_vehicle_type_metadata(cur, vehicle_types)
+    except Exception as exc:
+        log_optional_failure(config, "gbfs_vehicle_types", exc)
+        if is_connection_failure(exc):
+            raise
+
+
+def refresh_materialized_views(conn: psycopg.Connection, config: AppConfig, now: datetime) -> None:
+    try:
+        maybe_refresh_materialized_views(
+            conn,
+            now,
+            config.refresh_mv_interval,
+            config.refresh_mv_timeout,
+        )
+    except Exception as exc:
+        log_optional_failure(config, "materialized_views", exc)
+        if is_connection_failure(exc):
+            raise
 
 
 def ingest_once(conn: psycopg.Connection, config: AppConfig) -> dict:
@@ -504,90 +719,90 @@ def ingest_once(conn: psycopg.Connection, config: AppConfig) -> dict:
     cities = country.get("cities") or []
     raw_json = live_data if config.store_raw_json else None
 
-    with conn.cursor() as cur:
-        ensure_partitions(cur, fetched_at)
-        upsert_country(cur, country)
-        upsert_cities(cur, cities)
-        gap_info = record_snapshot_gap(cur, fetched_at, config.domain, config.poll_interval)
-        if gap_info:
-            log_event(
-                "warn",
-                "ingest",
-                "Snapshot gap detected",
-                event="snapshot_gap",
-                config=config,
-                extra=gap_info,
+    with conn.transaction():
+        with conn.cursor() as cur:
+            ensure_partitions(cur, fetched_at)
+            upsert_country(cur, country)
+            upsert_cities(cur, country.get("domain") or config.domain, cities)
+            gap_info = record_snapshot_gap(cur, fetched_at, config.domain, config.poll_interval)
+            if gap_info:
+                log_event(
+                    "warn",
+                    "ingest",
+                    "Snapshot gap detected",
+                    event="snapshot_gap",
+                    config=config,
+                    extra=gap_info,
+                )
+            snapshot_id = insert_snapshot(cur, fetched_at, config.domain, raw_json)
+
+            all_bike_type_ids: set[str] = set()
+            all_bikes = []
+            bike_status_rows = []
+            place_count = 0
+            bike_count = 0
+            movement_candidates = 0
+
+            for city in cities:
+                insert_city_status(cur, snapshot_id, fetched_at, city)
+                places = city.get("places") or []
+                upsert_places(cur, city.get("uid"), places)
+                insert_place_status(cur, snapshot_id, fetched_at, places)
+                place_count += len(places)
+                for place in places:
+                    for bike in place.get("bike_list") or []:
+                        bike_number = bike.get("number")
+                        if not bike_number:
+                            continue
+                        bike_type_id = (
+                            str(bike.get("bike_type"))
+                            if bike.get("bike_type") is not None
+                            else None
+                        )
+                        if bike_type_id:
+                            all_bike_type_ids.add(bike_type_id)
+                        all_bikes.append(
+                            (
+                                bike_number,
+                                bike.get("boardcomputer"),
+                                bike_type_id,
+                                bike.get("electric_lock"),
+                                bike.get("lock_types"),
+                                fetched_at,
+                                fetched_at,
+                            )
+                        )
+                        battery_pack = bike.get("battery_pack") or {}
+                        bike_status_rows.append(
+                            (
+                                snapshot_id,
+                                fetched_at,
+                                bike_number,
+                                place.get("uid"),
+                                bike.get("active"),
+                                bike.get("state"),
+                                bike.get("pedelec_battery"),
+                                battery_pack.get("percentage"),
+                                battery_pack.get("estimated_range_km"),
+                                place.get("lng"),
+                                place.get("lat"),
+                            )
+                        )
+                        bike_count += 1
+
+            upsert_vehicle_types(cur, all_bike_type_ids)
+            upsert_bikes(cur, all_bikes)
+            insert_bike_status(cur, snapshot_id, bike_status_rows)
+            movement_candidates = insert_bike_movements(
+                cur,
+                snapshot_id,
+                fetched_at,
+                config.movement_min_distance_m,
             )
-        snapshot_id = insert_snapshot(cur, fetched_at, config.domain, raw_json)
 
-        all_bike_type_ids: set[str] = set()
-        all_bikes = []
-        bike_status_rows = []
-        place_count = 0
-        bike_count = 0
-        movement_candidates = 0
-
-        for city in cities:
-            insert_city_status(cur, snapshot_id, fetched_at, city)
-            places = city.get("places") or []
-            upsert_places(cur, city.get("uid"), places)
-            insert_place_status(cur, snapshot_id, fetched_at, places)
-            place_count += len(places)
-            for place in places:
-                for bike in place.get("bike_list") or []:
-                    bike_number = bike.get("number")
-                    if not bike_number:
-                        continue
-                    bike_type_id = (
-                        str(bike.get("bike_type")) if bike.get("bike_type") is not None else None
-                    )
-                    if bike_type_id:
-                        all_bike_type_ids.add(bike_type_id)
-                    all_bikes.append(
-                        (
-                            bike_number,
-                            bike.get("boardcomputer"),
-                            bike_type_id,
-                            bike.get("electric_lock"),
-                            bike.get("lock_types"),
-                            fetched_at,
-                            fetched_at,
-                        )
-                    )
-                    battery_pack = bike.get("battery_pack") or {}
-                    bike_status_rows.append(
-                        (
-                            snapshot_id,
-                            fetched_at,
-                            bike_number,
-                            place.get("uid"),
-                            bike.get("active"),
-                            bike.get("state"),
-                            bike.get("pedelec_battery"),
-                            battery_pack.get("percentage"),
-                            place.get("lng"),
-                            place.get("lat"),
-                        )
-                    )
-                    bike_count += 1
-
-        upsert_vehicle_types(cur, all_bike_type_ids)
-        upsert_bikes(cur, all_bikes)
-        insert_bike_status(cur, snapshot_id, bike_status_rows)
-        movement_candidates = insert_bike_movements(cur, snapshot_id, fetched_at)
-
-        if config.fetch_zones and config.city_id:
-            zone_data = fetch_json(ZONE_BASE_URL.format(city_id=config.city_id))
-            upsert_zone_features(cur, config.city_id, "zone-service", zone_data)
-            flex_data = fetch_json(FLEXZONE_URL.format(domain=config.domain))
-            upsert_zone_features(cur, config.city_id, "flexzone", flex_data)
-
-        if config.fetch_gbfs:
-            vehicle_types = fetch_gbfs_vehicle_types(config.gbfs_system_id)
-            upsert_vehicle_type_metadata(cur, vehicle_types)
-
-    conn.commit()
-    maybe_refresh_materialized_views(conn, fetched_at, config.refresh_mv_interval)
+    refresh_zone_metadata(conn, config)
+    refresh_vehicle_type_metadata(conn, config)
+    refresh_materialized_views(conn, config, fetched_at)
     return {
         "snapshot_id": snapshot_id,
         "fetched_at": fetched_at,

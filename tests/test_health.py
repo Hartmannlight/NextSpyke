@@ -1,6 +1,7 @@
 import json
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -13,8 +14,14 @@ from nextspyke.health import health_check
 
 
 class DummyCursor:
-    def execute(self, _query: str) -> None:
+    def __init__(self, latest_snapshot=None):
+        self.latest_snapshot = latest_snapshot
+
+    def execute(self, _query: str, *_params) -> None:
         return None
+
+    def fetchone(self):
+        return (self.latest_snapshot,) if self.latest_snapshot else None
 
     def __enter__(self):
         return self
@@ -24,8 +31,11 @@ class DummyCursor:
 
 
 class DummyConn:
+    def __init__(self, latest_snapshot=None):
+        self.latest_snapshot = latest_snapshot
+
     def cursor(self):
-        return DummyCursor()
+        return DummyCursor(self.latest_snapshot)
 
     def __enter__(self):
         return self
@@ -46,7 +56,9 @@ def sample_config() -> AppConfig:
         fetch_zones=True,
         fetch_gbfs=True,
         store_raw_json=True,
+        movement_min_distance_m=10,
         refresh_mv_interval=0,
+        refresh_mv_timeout=30,
         gbfs_system_id="nextbike_fg",
         metrics_enabled=False,
         metrics_port=8000,
@@ -58,7 +70,11 @@ def sample_config() -> AppConfig:
 class TestHealth(unittest.TestCase):
     def test_health_ok(self):
         buffer = StringIO()
-        with patch("nextspyke.health.psycopg.connect", return_value=DummyConn()):
+        latest_snapshot = datetime.now(timezone.utc)
+        with patch(
+            "nextspyke.health.psycopg.connect",
+            return_value=DummyConn(latest_snapshot),
+        ):
             with patch("sys.stdout", buffer):
                 code = health_check(sample_config())
         payload = json.loads(buffer.getvalue())
@@ -67,6 +83,22 @@ class TestHealth(unittest.TestCase):
         self.assertEqual(payload["service"], "nextspyke")
         self.assertEqual(payload["checks"][1]["name"], "db")
         self.assertEqual(payload["checks"][1]["status"], "ok")
+        self.assertEqual(payload["checks"][2]["name"], "snapshot_freshness")
+        self.assertEqual(payload["checks"][2]["status"], "ok")
+
+    def test_health_fails_for_stale_snapshot(self):
+        buffer = StringIO()
+        latest_snapshot = datetime.now(timezone.utc) - timedelta(seconds=181)
+        with patch(
+            "nextspyke.health.psycopg.connect",
+            return_value=DummyConn(latest_snapshot),
+        ):
+            with patch("sys.stdout", buffer):
+                code = health_check(sample_config())
+        payload = json.loads(buffer.getvalue())
+        self.assertEqual(code, 1)
+        self.assertEqual(payload["checks"][1]["status"], "ok")
+        self.assertEqual(payload["checks"][2]["status"], "fail")
 
     def test_health_db_fail(self):
         buffer = StringIO()

@@ -1,0 +1,210 @@
+name: Container Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: container-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-scan-and-publish:
+    name: Container Release / build-scan-and-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      POETRY_VERSION: "2.1.3"
+      IMAGE_NAME: nextspyke-release
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: nextspyke
+      PGUSER: nextspyke
+      PGPASSWORD: nextspyke
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Compute image coordinates
+        id: image
+        run: |
+          repository="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          image="ghcr.io/${repository}"
+          short_sha="${GITHUB_SHA::12}"
+          build_tag="sha-${short_sha}-r${GITHUB_RUN_NUMBER}"
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          tags="${image}:${build_tag}"
+          floating_tags=""
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            tags="${tags}"$'\n'"${image}:latest"
+            floating_tags="latest"
+          fi
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            tags="${tags}"$'\n'"${image}:${GITHUB_REF_NAME}"
+            if [[ -n "${floating_tags}" ]]; then
+              floating_tags="${floating_tags},${GITHUB_REF_NAME}"
+            else
+              floating_tags="${GITHUB_REF_NAME}"
+            fi
+          fi
+          if [[ -z "${floating_tags}" ]]; then
+            floating_tags="none"
+          fi
+          {
+            echo "image=${image}"
+            echo "build_tag=${build_tag}"
+            echo "build_date=${build_date}"
+            echo "tags=${tags}"
+            echo "floating_tags=${floating_tags}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build candidate image
+        run: |
+          docker build \
+            --build-arg VERSION="${GITHUB_REF_NAME}" \
+            --build-arg VCS_REF="${GITHUB_SHA}" \
+            --build-arg BUILD_DATE="${{ steps.image.outputs.build_date }}" \
+            --build-arg SOURCE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            -t "${IMAGE_NAME}" .
+
+      - name: Start test database
+        run: docker compose up -d db
+
+      - name: Wait for test database
+        run: |
+          for _ in $(seq 1 30); do
+            if docker compose exec -T db pg_isready -U nextspyke -d nextspyke; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Smoke test candidate image
+        run: |
+          docker run --rm --network host \
+            -e PGHOST="${PGHOST}" \
+            -e PGPORT="${PGPORT}" \
+            -e PGDATABASE="${PGDATABASE}" \
+            -e PGUSER="${PGUSER}" \
+            -e PGPASSWORD="${PGPASSWORD}" \
+            "${IMAGE_NAME}" \
+            python -c "import psycopg; from datetime import datetime, timezone; from nextspyke.db import build_dsn, init_db; conn = psycopg.connect(build_dsn()); init_db(conn); cur = conn.cursor(); cur.execute('INSERT INTO snapshot (fetched_at, domain, source, raw_json) VALUES (%s, %s, %s, %s)', (datetime.now(timezone.utc), 'fg', 'release-smoke', None)); conn.commit(); cur.close(); conn.close()"
+          docker run --rm --network host \
+            -e PGHOST="${PGHOST}" \
+            -e PGPORT="${PGPORT}" \
+            -e PGDATABASE="${PGDATABASE}" \
+            -e PGUSER="${PGUSER}" \
+            -e PGPASSWORD="${PGPASSWORD}" \
+            "${IMAGE_NAME}" \
+            python -m nextspyke.app health
+
+      - name: Trivy repository config and secret scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: config,secret
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: false
+          format: table
+
+      - name: Trivy fixable image vulnerability gate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nextspyke-release
+          scan-type: image
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Trivy full image report
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nextspyke-release
+          scan-type: image
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "0"
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trivy-image-report
+          path: trivy-image.sarif
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish validated image
+        id: publish
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.tags }}
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.image.outputs.build_date }}
+            SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Write release summary
+        run: |
+          {
+            echo "## Container release"
+            echo ""
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Immutable build tag: \`${{ steps.image.outputs.image }}:${{ steps.image.outputs.build_tag }}\`"
+            echo "- Image digest: \`${{ steps.publish.outputs.digest }}\`"
+            echo "- Floating tags moved: \`${{ steps.image.outputs.floating_tags }}\`"
+            echo "- Base image: \`python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7\`"
+            echo "- SBOM/provenance: enabled via build attestation outputs"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Collect failure logs
+        if: failure()
+        run: |
+          mkdir -p artifacts
+          docker compose logs --no-color > artifacts/compose-logs.txt || true
+          docker images --digests > artifacts/docker-images.txt || true
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-failure-artifacts
+          path: artifacts
+
+      - name: Tear down Compose services
+        if: always()
+        run: docker compose down -v

@@ -1,6 +1,6 @@
+import os
 from datetime import datetime, timezone
 from pathlib import Path
-import os
 
 import psycopg
 from psycopg import sql
