@@ -164,6 +164,11 @@ class TestDbCoverage(unittest.TestCase):
         with patch("nextspyke.db.os.getenv", return_value=None):
             content = db.load_schema_sql()
         self.assertIn("CREATE TABLE", content)
+        self.assertIn("routes_view regclass := to_regclass('mv_routes_top');", content)
+        self.assertIn(
+            'echo "tags<<EOF"',
+            Path(".github/workflows/container-release.yml").read_text(),
+        )
 
     def test_load_schema_sql_raises_when_no_candidate_exists(self):
         with patch("nextspyke.db.Path.is_file", return_value=False):

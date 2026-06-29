@@ -239,10 +239,12 @@ GROUP BY 1, 2, 3;
 CREATE INDEX IF NOT EXISTS idx_mv_city_bikes_hourly ON mv_city_bikes_hourly (hour, city_uid);
 
 DO $$
+DECLARE
+  routes_view regclass := to_regclass('mv_routes_top');
 BEGIN
-  IF to_regclass('mv_routes_top') IS NOT NULL
+  IF routes_view IS NOT NULL
      AND POSITION(
-       'movement_reason' IN pg_get_viewdef('mv_routes_top'::regclass, TRUE)
+       'movement_reason' IN pg_get_viewdef(routes_view, TRUE)
      ) = 0 THEN
     DROP MATERIALIZED VIEW mv_routes_top;
   END IF;
@@ -267,10 +269,12 @@ GROUP BY 1, 2, 3, 4;
 CREATE INDEX IF NOT EXISTS idx_mv_routes_top ON mv_routes_top (trips DESC);
 
 DO $$
+DECLARE
+  dwell_view regclass := to_regclass('mv_bike_dwell');
 BEGIN
-  IF to_regclass('mv_bike_dwell') IS NOT NULL
+  IF dwell_view IS NOT NULL
      AND POSITION(
-       'bike_movement' IN pg_get_viewdef('mv_bike_dwell'::regclass, TRUE)
+       'bike_movement' IN pg_get_viewdef(dwell_view, TRUE)
      ) = 0 THEN
     DROP MATERIALIZED VIEW mv_bike_dwell;
   END IF;

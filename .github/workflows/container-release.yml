@@ -66,7 +66,9 @@ jobs:
             echo "image=${image}"
             echo "build_tag=${build_tag}"
             echo "build_date=${build_date}"
-            echo "tags=${tags}"
+            echo "tags<<EOF"
+            echo "${tags}"
+            echo "EOF"
             echo "floating_tags=${floating_tags}"
           } >> "${GITHUB_OUTPUT}"
 
