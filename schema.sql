@@ -159,6 +159,19 @@ CREATE TABLE IF NOT EXISTS bike_status (
 
 CREATE TABLE IF NOT EXISTS bike_status_default PARTITION OF bike_status DEFAULT;
 
+CREATE TABLE IF NOT EXISTS bike_last_status (
+  bike_number TEXT PRIMARY KEY REFERENCES bike(bike_number),
+  snapshot_id BIGINT NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL,
+  place_uid INTEGER REFERENCES place(place_uid),
+  geom GEOMETRY(Point, 4326),
+  active BOOLEAN,
+  state TEXT,
+  pedelec_battery INTEGER,
+  battery_pack_pct INTEGER,
+  battery_range_km DOUBLE PRECISION
+);
+
 CREATE TABLE IF NOT EXISTS bike_movement (
   movement_id BIGSERIAL PRIMARY KEY,
   bike_number TEXT REFERENCES bike(bike_number),
@@ -208,104 +221,15 @@ CREATE INDEX IF NOT EXISTS idx_place_geom ON place USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_bike_status_geom ON bike_status USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_zone_geom ON zone USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_bike_movement_bike_time ON bike_movement (bike_number, end_fetched_at);
+CREATE INDEX IF NOT EXISTS idx_bike_movement_time ON bike_movement (end_fetched_at);
 CREATE INDEX IF NOT EXISTS idx_bike_movement_places ON bike_movement (start_place_uid, end_place_uid);
+CREATE INDEX IF NOT EXISTS idx_bike_movement_end_geom ON bike_movement USING GIST (end_geom);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_bike_movement_unique
   ON bike_movement (bike_number, start_snapshot_id, end_snapshot_id);
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_hotspots_hourly AS
-SELECT
-  date_trunc('hour', bs.fetched_at) AS hour,
-  p.place_uid,
-  p.name AS place_name,
-  p.city_uid,
-  COUNT(DISTINCT bs.bike_number) AS bikes_seen
-FROM bike_status bs
-JOIN place p ON p.place_uid = bs.place_uid
-GROUP BY 1, 2, 3, 4;
-
-CREATE INDEX IF NOT EXISTS idx_mv_hotspots_hourly ON mv_hotspots_hourly (hour, place_uid);
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_city_bikes_hourly AS
-SELECT
-  date_trunc('hour', bs.fetched_at) AS hour,
-  c.city_uid,
-  c.name AS city_name,
-  COUNT(DISTINCT bs.bike_number) AS bikes_seen
-FROM bike_status bs
-JOIN place p ON p.place_uid = bs.place_uid
-JOIN city c ON c.city_uid = p.city_uid
-GROUP BY 1, 2, 3;
-
-CREATE INDEX IF NOT EXISTS idx_mv_city_bikes_hourly ON mv_city_bikes_hourly (hour, city_uid);
-
-DO $$
-DECLARE
-  routes_view regclass := to_regclass('mv_routes_top');
-BEGIN
-  IF routes_view IS NOT NULL
-     AND POSITION(
-       'movement_reason' IN pg_get_viewdef(routes_view, TRUE)
-     ) = 0 THEN
-    DROP MATERIALIZED VIEW mv_routes_top;
-  END IF;
-END
-$$;
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_routes_top AS
-SELECT
-  bm.start_place_uid,
-  ps.name AS start_place,
-  bm.end_place_uid,
-  pe.name AS end_place,
-  COUNT(*) AS trips,
-  AVG(bm.distance_m)::int AS avg_distance_m,
-  AVG(bm.duration_seconds)::int AS avg_duration_s
-FROM bike_movement bm
-LEFT JOIN place ps ON ps.place_uid = bm.start_place_uid
-LEFT JOIN place pe ON pe.place_uid = bm.end_place_uid
-WHERE bm.movement_reason = 'place_change'
-GROUP BY 1, 2, 3, 4;
-
-CREATE INDEX IF NOT EXISTS idx_mv_routes_top ON mv_routes_top (trips DESC);
-
-DO $$
-DECLARE
-  dwell_view regclass := to_regclass('mv_bike_dwell');
-BEGIN
-  IF dwell_view IS NOT NULL
-     AND POSITION(
-       'bike_movement' IN pg_get_viewdef(dwell_view, TRUE)
-     ) = 0 THEN
-    DROP MATERIALIZED VIEW mv_bike_dwell;
-  END IF;
-END
-$$;
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_bike_dwell AS
-WITH last_movement AS (
-  SELECT bike_number, MAX(end_fetched_at) AS last_change_at
-  FROM bike_movement
-  GROUP BY bike_number
-),
-last_seen AS (
-  SELECT DISTINCT ON (bike_number)
-    bike_number,
-    fetched_at AS last_seen_at,
-    place_uid AS last_place_uid
-  FROM bike_status
-  ORDER BY bike_number, fetched_at DESC
-)
-SELECT
-  l.bike_number,
-  l.last_seen_at,
-  l.last_place_uid AS place_uid,
-  p.name AS place_name,
-  EXTRACT(
-    EPOCH FROM (l.last_seen_at - COALESCE(m.last_change_at, b.first_seen_at))
-  )::int AS dwell_seconds
-FROM last_seen l
-JOIN bike b ON b.bike_number = l.bike_number
-LEFT JOIN last_movement m ON m.bike_number = l.bike_number
-LEFT JOIN place p ON p.place_uid = l.last_place_uid;
-
-CREATE INDEX IF NOT EXISTS idx_mv_bike_dwell ON mv_bike_dwell (dwell_seconds DESC);
+-- These full-history rollups made ingest latency grow with database size. Dashboards now
+-- aggregate bounded time windows directly from bike_movement and bike_last_status.
+DROP MATERIALIZED VIEW IF EXISTS mv_hotspots_hourly;
+DROP MATERIALIZED VIEW IF EXISTS mv_city_bikes_hourly;
+DROP MATERIALIZED VIEW IF EXISTS mv_routes_top;
+DROP MATERIALIZED VIEW IF EXISTS mv_bike_dwell;

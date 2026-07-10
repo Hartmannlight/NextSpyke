@@ -160,11 +160,48 @@ class TestConfigCoverage(unittest.TestCase):
 
 
 class TestDbCoverage(unittest.TestCase):
+    def test_tracking_dashboard_uses_bounded_location_model(self):
+        dashboard = json.loads(
+            Path("observability/grafana/dashboards/nextspyke-overview.json").read_text()
+        )
+        panels = {panel["id"]: panel for panel in dashboard["panels"]}
+
+        self.assertIn("$__timeGroupAlias", panels[11]["targets"][0]["rawSql"])
+        self.assertEqual(panels[11]["targets"][0]["format"], "time_series")
+        self.assertEqual(panels[13]["options"]["basemap"]["config"]["theme"], "light")
+        self.assertEqual(
+            panels[13]["options"]["layers"][0]["config"]["style"]["symbol"]["fixed"],
+            "img/icons/unicons/map-marker.svg",
+        )
+        self.assertIn(
+            "bls.fetched_at = (SELECT MAX(fetched_at) FROM snapshot)",
+            panels[13]["targets"][0]["rawSql"],
+        )
+        self.assertGreaterEqual(
+            panels[13]["gridPos"]["y"],
+            panels[11]["gridPos"]["y"] + panels[11]["gridPos"]["h"],
+        )
+        self.assertEqual(panels[14]["options"]["layers"][0]["type"], "heatmap")
+        self.assertEqual(
+            panels[14]["options"]["layers"][0]["config"]["weight"]["field"],
+            "parking_events",
+        )
+        self.assertIn("ST_SnapToGrid", panels[14]["targets"][0]["rawSql"])
+        self.assertEqual(panels[15]["gridPos"]["w"], 24)
+        self.assertIn("distance_m >= 60", panels[15]["targets"][0]["rawSql"])
+
+        datasource_config = Path(
+            "observability/grafana/provisioning/datasources/datasource.yml"
+        ).read_text()
+        self.assertIn("uid: nextspyke-postgres", datasource_config)
+        self.assertIn("uid: PBFA97CFB590B2093", datasource_config)
+
     def test_load_schema_sql_prefers_repo_fallback(self):
         with patch("nextspyke.db.os.getenv", return_value=None):
             content = db.load_schema_sql()
         self.assertIn("CREATE TABLE", content)
-        self.assertIn("routes_view regclass := to_regclass('mv_routes_top');", content)
+        self.assertIn("CREATE TABLE IF NOT EXISTS bike_last_status", content)
+        self.assertIn("DROP MATERIALIZED VIEW IF EXISTS mv_city_bikes_hourly", content)
         self.assertIn(
             'echo "tags<<EOF"',
             Path(".github/workflows/container-release.yml").read_text(),
@@ -460,9 +497,6 @@ class TestAppCoverage(unittest.TestCase):
 
 
 class TestIngestCoverage(unittest.TestCase):
-    def setUp(self):
-        ingest._last_mv_refresh_at = None
-
     def test_fetch_json_without_params(self):
         response = DummyResponse(b'{"ok": true}')
         with patch("nextspyke.ingest.urlopen", return_value=response) as urlopen_mock:
@@ -470,24 +504,6 @@ class TestIngestCoverage(unittest.TestCase):
         self.assertEqual(data, {"ok": True})
         request = urlopen_mock.call_args.args[0]
         self.assertEqual(request.full_url, "https://example.test/plain")
-
-    def test_maybe_refresh_materialized_views_skips_disabled_and_recent(self):
-        conn = ConnectionWithCursor(Mock())
-        ingest.maybe_refresh_materialized_views(conn, datetime.now(timezone.utc), 0, 30)
-        self.assertEqual(conn.cursor_obj.execute.call_count, 0)
-
-        ingest._last_mv_refresh_at = datetime.now(timezone.utc)
-        ingest.maybe_refresh_materialized_views(conn, datetime.now(timezone.utc), 60, 30)
-        self.assertEqual(conn.cursor_obj.execute.call_count, 0)
-
-    def test_maybe_refresh_materialized_views_without_timeout_refreshes_views(self):
-        cur = Mock()
-        conn = ConnectionWithCursor(cur)
-        now = datetime.now(timezone.utc)
-        with patch.object(ingest, "MATERIALIZED_VIEWS", ("mv_one", "mv_two")):
-            ingest.maybe_refresh_materialized_views(conn, now, 60, 0)
-        self.assertEqual(cur.execute.call_count, 2)
-        self.assertEqual(ingest._last_mv_refresh_at, now)
 
     def test_log_optional_failure_and_connection_failure_classifier(self):
         with patch("nextspyke.ingest.log_event") as log_event:
@@ -533,6 +549,7 @@ class TestIngestCoverage(unittest.TestCase):
                 {
                     "uid": 10,
                     "name": "Station",
+                    "spot": True,
                     "lat": 49.0,
                     "lng": 8.4,
                     "place_type": 5,
@@ -540,13 +557,14 @@ class TestIngestCoverage(unittest.TestCase):
                 {
                     "uid": 11,
                     "name": "Free",
+                    "spot": False,
                     "lat": 49.1,
                     "lng": 8.5,
                     "place_type": None,
                 },
             ],
         )
-        self.assertEqual(cur.execute.call_count, 2)
+        self.assertEqual(cur.execute.call_count, 1)
 
     def test_upsert_vehicle_types_and_bikes_empty_and_non_empty(self):
         cur = Mock()
@@ -583,8 +601,17 @@ class TestIngestCoverage(unittest.TestCase):
         cur.reset_mock()
         ingest.insert_place_status(cur, 1, fetched_at, [])
         cur.executemany.assert_not_called()
-        ingest.insert_place_status(cur, 1, fetched_at, [{"uid": 3, "bike_types": {"ebike": 1}}])
+        ingest.insert_place_status(
+            cur,
+            1,
+            fetched_at,
+            [
+                {"uid": 2, "spot": False},
+                {"uid": 3, "spot": True, "bike_types": {"ebike": 1}},
+            ],
+        )
         self.assertEqual(cur.executemany.call_count, 1)
+        self.assertEqual(len(cur.executemany.call_args.args[1]), 1)
 
         cur.reset_mock()
         ingest.insert_bike_status(cur, 1, [])
@@ -742,28 +769,6 @@ class TestIngestCoverage(unittest.TestCase):
             with self.assertRaises(psycopg.OperationalError):
                 ingest.refresh_vehicle_type_metadata(conn, sample_config())
 
-    def test_refresh_materialized_views_branches(self):
-        conn = ConnectionWithCursor(Mock())
-        now = datetime.now(timezone.utc)
-
-        with patch("nextspyke.ingest.maybe_refresh_materialized_views") as refresh:
-            ingest.refresh_materialized_views(conn, sample_config(), now)
-        refresh.assert_called_once()
-
-        with patch(
-            "nextspyke.ingest.maybe_refresh_materialized_views", side_effect=RuntimeError("mv fail")
-        ):
-            with patch("nextspyke.ingest.log_optional_failure") as log_optional_failure:
-                ingest.refresh_materialized_views(conn, sample_config(), now)
-        log_optional_failure.assert_called_once()
-
-        with patch(
-            "nextspyke.ingest.maybe_refresh_materialized_views",
-            side_effect=psycopg.InterfaceError("db"),
-        ):
-            with self.assertRaises(psycopg.InterfaceError):
-                ingest.refresh_materialized_views(conn, sample_config(), now)
-
     def test_ingest_once_raises_without_country(self):
         conn = ConnectionWithCursor(Mock())
         with patch("nextspyke.ingest.fetch_json", return_value={"countries": []}):
@@ -784,6 +789,7 @@ class TestIngestCoverage(unittest.TestCase):
                             "places": [
                                 {
                                     "uid": 7,
+                                    "spot": True,
                                     "lat": 49.0,
                                     "lng": 8.4,
                                     "bike_list": [
@@ -844,9 +850,14 @@ class TestIngestCoverage(unittest.TestCase):
                                                             with patch(
                                                                 "nextspyke.ingest.insert_bike_status"
                                                             ) as insert_bike_status:
-                                                                with patch(
-                                                                    "nextspyke.ingest.insert_bike_movements",
-                                                                    return_value=2,
+                                                                with (
+                                                                    patch(
+                                                                        "nextspyke.ingest.insert_bike_movements",
+                                                                        return_value=2,
+                                                                    ),
+                                                                    patch(
+                                                                        "nextspyke.ingest.update_bike_last_status"
+                                                                    ) as update_last_status,
                                                                 ):
                                                                     with patch(
                                                                         "nextspyke.ingest.refresh_zone_metadata"
@@ -854,15 +865,12 @@ class TestIngestCoverage(unittest.TestCase):
                                                                         with patch(
                                                                             "nextspyke.ingest.refresh_vehicle_type_metadata"
                                                                         ) as refresh_types:
-                                                                            with patch(
-                                                                                "nextspyke.ingest.refresh_materialized_views"
-                                                                            ) as refresh_views:
-                                                                                result = ingest.ingest_once(
-                                                                                    conn,
-                                                                                    sample_config(
-                                                                                        store_raw_json=False
-                                                                                    ),
-                                                                                )
+                                                                            result = ingest.ingest_once(
+                                                                                conn,
+                                                                                sample_config(
+                                                                                    store_raw_json=False
+                                                                                ),
+                                                                            )
         self.assertEqual(result["snapshot_id"], 9)
         self.assertEqual(result["places"], 1)
         self.assertEqual(result["bikes"], 2)
@@ -875,9 +883,9 @@ class TestIngestCoverage(unittest.TestCase):
         upsert_vehicle_types.assert_called_once_with(cur, {"5"})
         upsert_bikes.assert_called_once()
         insert_bike_status.assert_called_once()
+        update_last_status.assert_called_once_with(cur, 9, fetched_at)
         refresh_zone_metadata.assert_called_once()
         refresh_types.assert_called_once()
-        refresh_views.assert_called_once_with(conn, ANY, fetched_at)
         self.assertTrue(
             any(call.kwargs.get("event") == "snapshot_gap" for call in log_event.call_args_list)
         )

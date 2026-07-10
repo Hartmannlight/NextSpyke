@@ -140,7 +140,6 @@ class TestDbIntegration(unittest.TestCase):
                 db.ensure_partitions(cur, fetched_at)
                 ingest.upsert_country(cur, country)
                 ingest.upsert_cities(cur, country["domain"], [city])
-                ingest.upsert_places(cur, city_uid, [start_place])
                 ingest.upsert_bikes(
                     cur,
                     [(bike_number, None, None, True, ["frame_lock"], fetched_at, fetched_at)],
@@ -159,7 +158,7 @@ class TestDbIntegration(unittest.TestCase):
                             first_snapshot_id,
                             fetched_at,
                             bike_number,
-                            place_uid,
+                            None,
                             True,
                             "ok",
                             None,
@@ -170,7 +169,7 @@ class TestDbIntegration(unittest.TestCase):
                         )
                     ],
                 )
-                ingest.upsert_places(cur, city_uid, [end_place])
+                ingest.update_bike_last_status(cur, first_snapshot_id, fetched_at)
                 second_snapshot_id = ingest.insert_snapshot(
                     cur,
                     next_fetched_at,
@@ -185,7 +184,7 @@ class TestDbIntegration(unittest.TestCase):
                             second_snapshot_id,
                             next_fetched_at,
                             bike_number,
-                            place_uid,
+                            None,
                             True,
                             "ok",
                             None,

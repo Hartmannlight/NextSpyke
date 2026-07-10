@@ -63,7 +63,10 @@ def load_config() -> AppConfig:
     fetch_zones = env_bool("FETCH_ZONES", True)
     fetch_gbfs = env_bool("FETCH_GBFS", True)
     store_raw_json = env_bool("STORE_RAW_JSON", True)
-    movement_min_distance_m = float(os.getenv("MOVEMENT_MIN_DISTANCE_METERS", "10"))
+    movement_min_distance_m = max(
+        60.0,
+        float(os.getenv("MOVEMENT_MIN_DISTANCE_METERS", "60")),
+    )
     refresh_mv_interval = int(os.getenv("REFRESH_MV_INTERVAL_SECONDS", "0"))
     refresh_mv_timeout = int(os.getenv("REFRESH_MV_TIMEOUT_SECONDS", "30"))
     gbfs_system_id = os.getenv("GBFS_SYSTEM_ID", f"nextbike_{domain}")

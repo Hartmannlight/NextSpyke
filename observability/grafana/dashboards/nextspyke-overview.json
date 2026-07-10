@@ -1,110 +1,1329 @@
 {
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
   "id": null,
-  "uid": "nextspyke-overview",
-  "title": "NextSpyke Overview",
-  "tags": ["nextspyke", "app"],
-  "timezone": "browser",
-  "schemaVersion": 39,
-  "version": 1,
-  "refresh": "10s",
+  "links": [],
   "panels": [
     {
-      "type": "stat",
-      "title": "App Up",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "text": "DOWN"
+                },
+                "1": {
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
       "targets": [
         {
-          "expr": "app_up",
+          "editorMode": "code",
+          "expr": "max(up{job=\"nextspyke\"})",
+          "instant": true,
           "refId": "A"
         }
       ],
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
-        "orientation": "horizontal",
-        "textMode": "auto"
-      }
+      "title": "Prometheus Scrape",
+      "type": "stat"
     },
     {
-      "type": "stat",
-      "title": "Iterations Total",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "text": "STOPPED"
+                },
+                "1": {
+                  "text": "RUNNING"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
       "id": 2,
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
       "targets": [
         {
-          "expr": "app_iterations_total",
+          "editorMode": "code",
+          "expr": "max(app_up{job=\"nextspyke\"})",
+          "instant": true,
           "refId": "A"
         }
       ],
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
-      }
+      "title": "Collector Process",
+      "type": "stat"
     },
     {
-      "type": "stat",
-      "title": "Failures Total",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 120
+              },
+              {
+                "color": "red",
+                "value": 240
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
       "id": 3,
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
       "targets": [
         {
-          "expr": "app_iteration_failures_total",
+          "editorMode": "code",
+          "expr": "time() - max(app_last_iteration_timestamp_seconds{job=\"nextspyke\"})",
+          "instant": true,
           "refId": "A"
         }
       ],
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
-      }
+      "title": "Last Iteration Age",
+      "type": "stat"
     },
     {
-      "type": "stat",
-      "title": "Last Iteration (s ago)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
       "id": 4,
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
       "targets": [
         {
-          "expr": "time() - app_last_iteration_timestamp_seconds",
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::double precision AS value FROM snapshot;",
           "refId": "A"
         }
       ],
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
-      }
+      "title": "Total Snapshots",
+      "type": "stat"
     },
     {
-      "type": "timeseries",
-      "title": "Iteration Duration (p50/p95/p99)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 4
+      },
       "id": 5,
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum(rate(app_iteration_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p50",
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::double precision AS value FROM place WHERE spot IS TRUE;",
           "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(app_iteration_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(app_iteration_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p99",
-          "refId": "C"
         }
-      ]
+      ],
+      "title": "Official Stations",
+      "type": "stat",
+      "description": "Only official Nextbike stations (spot=true). Free-floating bike coordinates are not stations."
     },
     {
-      "type": "timeseries",
-      "title": "Failures by Reason",
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 1800
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 4
+      },
       "id": 6,
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
       "targets": [
         {
-          "expr": "sum by (reason) (rate(app_iteration_failure_reasons_total[5m]))",
-          "legendFormat": "{{reason}}",
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(MAX(gap_seconds), 0)::double precision AS value FROM snapshot_gap WHERE gap_end >= NOW() - INTERVAL '30 days';",
           "refId": "A"
         }
-      ]
+      ],
+      "title": "Worst Snapshot Gap In 30d",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 4
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::double precision AS value FROM bike_movement WHERE end_fetched_at >= NOW() - INTERVAL '24 hours' AND distance_m >= 60;",
+          "refId": "A"
+        }
+      ],
+      "title": "Movements Over 60m In 24h",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      },
+      "id": 8,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "increase(app_iteration_failures_total{job=\"nextspyke\"}[24h])",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failures In 24h",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT fetched_at AS \"time\", COUNT(*)::double precision AS \"Bikes seen\" FROM bike_status WHERE $__timeFilter(fetched_at) GROUP BY fetched_at ORDER BY fetched_at;",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT fetched_at AS \"time\", SUM(bikes_available_to_rent)::double precision AS \"Available bikes\" FROM place_status WHERE $__timeFilter(fetched_at) GROUP BY fetched_at ORDER BY fetched_at;",
+          "refId": "B"
+        }
+      ],
+      "title": "Fleet Per Snapshot",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "rate(app_iteration_duration_seconds_sum{job=\"nextspyke\"}[15m]) / rate(app_iteration_duration_seconds_count{job=\"nextspyke\"}[15m])",
+          "legendFormat": "Average duration",
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(app_iteration_duration_seconds_bucket{job=\"nextspyke\"}[15m])))",
+          "legendFormat": "P95 duration",
+          "refId": "B"
+        }
+      ],
+      "title": "Iteration Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroupAlias(end_fetched_at, $__interval, 0),\n  COUNT(*)::double precision AS \"Movements\"\nFROM bike_movement\nWHERE $__timeFilter(end_fetched_at)\n  AND distance_m >= 60\nGROUP BY 1\nORDER BY 1;",
+          "refId": "A"
+        }
+      ],
+      "title": "Detected Movements",
+      "type": "timeseries",
+      "description": "One aggregated series; the bucket size follows the dashboard time range."
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 12,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH parking_cells AS (\n  SELECT ST_SnapToGrid(ST_Transform(end_geom, 3857), 10) AS cell,\n         COUNT(*)::double precision AS parking_events\n  FROM bike_movement\n  WHERE end_fetched_at >= NOW() - INTERVAL '30 days'\n    AND distance_m >= 60 AND end_geom IS NOT NULL\n    AND EXISTS (\n      SELECT 1 FROM city c\n      WHERE c.bounds IS NOT NULL AND ST_Covers(c.bounds, end_geom)\n    )\n  GROUP BY 1\n)\nSELECT CONCAT(ROUND(ST_X(ST_Transform(cell, 4326))::numeric, 5), ', ',\n              ROUND(ST_Y(ST_Transform(cell, 4326))::numeric, 5)) AS metric,\n       parking_events AS value\nFROM parking_cells\nORDER BY parking_events DESC\nLIMIT 10;",
+          "refId": "A"
+        }
+      ],
+      "title": "Most Used Parking Cells In 30d",
+      "type": "bargauge",
+      "description": "Top 10 ten-metre cells by detected arrivals, independent of API place identifiers."
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "red",
+                "value": 75
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 13,
+      "options": {
+        "basemap": {
+          "name": "Light CARTO",
+          "type": "carto",
+          "config": {
+            "theme": "light",
+            "showLabels": true
+          }
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": true,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "semi-dark-blue"
+                },
+                "opacity": 0.9,
+                "size": {
+                  "fixed": 18,
+                  "min": 18,
+                  "max": 18
+                },
+                "symbol": {
+                  "fixed": "img/icons/unicons/map-marker.svg",
+                  "mode": "fixed"
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "bottom"
+                },
+                "textConfig": {
+                  "fontSize": 11,
+                  "offsetX": 0,
+                  "offsetY": -16,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lon",
+              "mode": "coords"
+            },
+            "name": "Live bikes",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lat": 49,
+          "lon": 8.4,
+          "zoom": 15,
+          "padding": 5
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT bls.bike_number,\n       COALESCE(p.name, 'Free-floating') AS location_name,\n       ST_Y(bls.geom) AS lat, ST_X(bls.geom) AS lon,\n       bls.fetched_at AS last_seen_at, bls.state, bls.active,\n       bls.pedelec_battery, bls.battery_pack_pct, bls.battery_range_km\nFROM bike_last_status bls\nLEFT JOIN place p ON p.place_uid = bls.place_uid\nWHERE bls.geom IS NOT NULL\n  AND bls.fetched_at = (SELECT MAX(fetched_at) FROM snapshot)\n  AND EXISTS (\n    SELECT 1 FROM city c\n    WHERE c.bounds IS NOT NULL AND ST_Covers(c.bounds, bls.geom)\n  )\nORDER BY bls.bike_number;",
+          "refId": "A"
+        }
+      ],
+      "title": "Live Bike Positions",
+      "type": "geomap",
+      "description": "Latest observed position per bike. A pin is a bike, not a station."
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-gray",
+                "value": null
+              },
+              {
+                "color": "dark-blue",
+                "value": 0.1
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 14,
+      "options": {
+        "basemap": {
+          "name": "Light CARTO",
+          "type": "carto",
+          "config": {
+            "theme": "light",
+            "showLabels": true
+          }
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": true,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "blur": 15,
+              "radius": 20,
+              "weight": {
+                "field": "parking_events",
+                "fixed": 1,
+                "min": 0,
+                "max": 1
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lon",
+              "mode": "coords"
+            },
+            "name": "Parking event density",
+            "tooltip": true,
+            "type": "heatmap"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "id": "coords",
+          "lat": 49.0069,
+          "lon": 8.4037,
+          "zoom": 11
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH parking_cells AS (\n  SELECT ST_SnapToGrid(ST_Transform(end_geom, 3857), 10) AS cell,\n         COUNT(*)::double precision AS parking_events,\n         COUNT(DISTINCT bike_number)::double precision AS unique_bikes\n  FROM bike_movement\n  WHERE end_fetched_at >= NOW() - INTERVAL '30 days'\n    AND distance_m >= 60 AND end_geom IS NOT NULL\n    AND EXISTS (\n      SELECT 1 FROM city c\n      WHERE c.bounds IS NOT NULL AND ST_Covers(c.bounds, end_geom)\n    )\n  GROUP BY 1\n)\nSELECT ST_Y(ST_Transform(cell, 4326)) AS lat,\n       ST_X(ST_Transform(cell, 4326)) AS lon,\n       parking_events, unique_bikes\nFROM parking_cells\nORDER BY parking_events DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "30d Parking Heatmap (10m Cells)",
+      "type": "geomap",
+      "description": "Detected arrivals grouped into 10 x 10 metre cells. Repeated stationary snapshots do not increase the weight."
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "id": 15,
+      "options": {
+        "basemap": {
+          "name": "Light CARTO",
+          "type": "carto",
+          "config": {
+            "theme": "light",
+            "showLabels": true
+          }
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": true,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "arrow": 1,
+              "edgeStyle": {
+                "color": {
+                  "fixed": "semi-dark-blue"
+                },
+                "size": {
+                  "fixed": 4
+                },
+                "text": {
+                  "field": "edge_label",
+                  "mode": "field"
+                },
+                "textConfig": {
+                  "fontSize": 13,
+                  "offsetX": 0,
+                  "offsetY": -10,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              },
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "dark-blue"
+                },
+                "size": {
+                  "fixed": 16
+                },
+                "symbol": {
+                  "fixed": "img/icons/unicons/map-marker.svg",
+                  "mode": "fixed"
+                },
+                "text": {
+                  "field": "seq_label",
+                  "mode": "field"
+                },
+                "textConfig": {
+                  "fontSize": 13,
+                  "offsetX": 0,
+                  "offsetY": -15,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lon",
+              "mode": "coords"
+            },
+            "name": "Selected bike path",
+            "tooltip": true,
+            "type": "network"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lat": 49,
+          "lon": 8.4,
+          "zoom": 15,
+          "padding": 10
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT\n    bike_number,\n    end_fetched_at,\n    start_place_uid,\n    end_place_uid,\n    start_geom,\n    end_geom,\n    distance_m,\n    duration_seconds,\n    movement_reason,\n    row_number() OVER (ORDER BY end_fetched_at) AS leg_index\n  FROM bike_movement\n  WHERE bike_number = '$bike_number'\n    AND $__timeFilter(end_fetched_at)\n    AND start_geom IS NOT NULL\n    AND end_geom IS NOT NULL\n    AND distance_m >= 60\n), ordered_points AS (\n  SELECT\n    '1'::text AS id,\n    '1'::text AS seq_label,\n    bike_number,\n    start_place_uid AS place_uid,\n    start_geom AS geom,\n    NULL::timestamptz AS arrived_at,\n    1 AS seq_order\n  FROM selected\n  WHERE leg_index = 1\n  UNION ALL\n  SELECT\n    (leg_index + 1)::text AS id,\n    (leg_index + 1)::text AS seq_label,\n    bike_number,\n    end_place_uid AS place_uid,\n    end_geom AS geom,\n    end_fetched_at AS arrived_at,\n    leg_index + 1 AS seq_order\n  FROM selected\n), dedup_points AS (\n  SELECT DISTINCT ON (id)\n    id,\n    seq_label,\n    bike_number,\n    place_uid,\n    geom,\n    arrived_at,\n    seq_order\n  FROM ordered_points\n  ORDER BY id\n)\nSELECT\n  dp.id,\n  dp.seq_label,\n  dp.bike_number,\n  COALESCE(p.name, CONCAT('Place #', dp.place_uid::text)) AS place_name,\n  ST_Y(dp.geom) AS lat,\n  ST_X(dp.geom) AS lon,\n  dp.arrived_at,\n  dp.seq_order::double precision AS seq_order\nFROM dedup_points dp\nLEFT JOIN place p ON p.place_uid = dp.place_uid\nWHERE dp.geom IS NOT NULL\nORDER BY dp.seq_order;",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT bike_number, end_fetched_at, distance_m, duration_seconds, movement_reason,\n         row_number() OVER (ORDER BY end_fetched_at) AS leg_index\n  FROM bike_movement\n  WHERE bike_number = '$bike_number' AND $__timeFilter(end_fetched_at)\n    AND start_geom IS NOT NULL AND end_geom IS NOT NULL AND distance_m >= 60\n)\nSELECT leg_index::text AS source, (leg_index + 1)::text AS target,\n       bike_number, end_fetched_at, distance_m::double precision AS distance_m,\n       duration_seconds::double precision AS duration_seconds, movement_reason,\n       leg_index::text AS edge_label\nFROM selected\nORDER BY leg_index;",
+          "refId": "B"
+        }
+      ],
+      "title": "Selected Bike Route Map",
+      "type": "geomap",
+      "description": "Only movements of at least 60 metres. Point and arrow labels show the chronological leg number."
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
+      "id": 16,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": true,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "end_fetched_at"
+          }
+        ]
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  row_number() OVER (ORDER BY end_fetched_at) AS leg,\n  end_fetched_at,\n  COALESCE(ps.name, CONCAT('Place #', bm.start_place_uid::text)) AS start_place,\n  COALESCE(pe.name, CONCAT('Place #', bm.end_place_uid::text)) AS end_place,\n  bm.distance_m::double precision AS distance_m,\n  bm.duration_seconds::double precision AS duration_seconds,\n  bm.movement_reason\nFROM bike_movement bm\nLEFT JOIN place ps ON ps.place_uid = bm.start_place_uid\nLEFT JOIN place pe ON pe.place_uid = bm.end_place_uid\nWHERE bm.bike_number = '$bike_number'\n  AND $__timeFilter(bm.end_fetched_at)\n  AND bm.distance_m >= 60\nORDER BY bm.end_fetched_at;",
+          "refId": "A"
+        }
+      ],
+      "title": "Selected Bike Route Segments",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "nextspyke-postgres"
+      },
+      "description": "Zaehlt pro Snapshot, wie viele Fahrraeder mit ihrer letzten bekannten Position innerhalb des Bereichs Mathebau liegen.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 14,
+            "lineInterpolation": "smooth",
+            "lineWidth": 3,
+            "showPoints": "auto"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "nextspyke-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  bs.fetched_at AS \"time\",\n  COUNT(DISTINCT bs.bike_number)::double precision AS \"Bikes in Mathebau\"\nFROM bike_status bs\nWHERE $__timeFilter(bs.fetched_at)\n  AND bs.geom IS NOT NULL\n  AND ST_Within(\n    bs.geom,\n    ST_SetSRID(\n      ST_GeomFromGeoJSON('{\"type\":\"Polygon\",\"coordinates\":[[[8.4083365,49.0110833],[8.4092336,49.0103876],[8.4100989,49.0109599],[8.4102355,49.0112964],[8.4099816,49.0114499],[8.4092958,49.0117946],[8.4090766,49.0115885],[8.4085742,49.0112439],[8.4085614,49.011236],[8.4083365,49.0110833]]]}'),\n      4326\n    )\n  )\nGROUP BY bs.fetched_at\nORDER BY bs.fetched_at;",
+          "refId": "A"
+        }
+      ],
+      "title": "Mathebau Bike Count",
+      "type": "timeseries"
     }
-  ]
+  ],
+  "preload": false,
+  "refresh": "30s",
+  "schemaVersion": 42,
+  "tags": [
+    "nextspyke"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "54300",
+          "value": "54300"
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "nextspyke-postgres"
+        },
+        "definition": "SELECT DISTINCT bike_number FROM bike_movement WHERE distance_m >= 60 ORDER BY bike_number",
+        "includeAll": false,
+        "label": "Bike",
+        "multi": false,
+        "name": "bike_number",
+        "options": [],
+        "query": "SELECT DISTINCT bike_number FROM bike_movement WHERE distance_m >= 60 ORDER BY bike_number",
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "NextSpyke Overview",
+  "uid": "nextspyke-overview",
+  "version": 10
 }

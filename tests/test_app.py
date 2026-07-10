@@ -6,7 +6,7 @@ import unittest
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -135,7 +135,7 @@ class TestApp(unittest.TestCase):
         ):
             loaded = config.load_config()
         self.assertEqual(loaded.refresh_mv_timeout, 12)
-        self.assertEqual(loaded.movement_min_distance_m, 7.5)
+        self.assertEqual(loaded.movement_min_distance_m, 60)
 
     def test_fetch_json(self):
         payload = {"ok": True, "value": 3}
@@ -183,6 +183,7 @@ class TestApp(unittest.TestCase):
             "upsert_vehicle_types",
             "upsert_bikes",
             "insert_bike_status",
+            "update_bike_last_status",
         )
         with ExitStack() as stack:
             for helper in patched_helpers:
@@ -213,8 +214,9 @@ class TestApp(unittest.TestCase):
 
         query, params = cur.execute.call_args.args
         self.assertIn("coordinate_change", query)
-        self.assertIn("start_spot IS NOT TRUE", query)
-        self.assertEqual(params, (42, fetched_at, 42, fetched_at, 10))
+        self.assertIn("JOIN bike_last_status", query)
+        self.assertIn("WHERE distance_m >= %s", query)
+        self.assertEqual(params, (42, fetched_at, 10))
         self.assertEqual(count, 2)
 
     def test_movement_backfill_is_conflict_safe(self):
@@ -229,26 +231,16 @@ class TestApp(unittest.TestCase):
         self.assertEqual(params, (12.5,))
         self.assertEqual(count, 3)
 
-    def test_materialized_view_refresh_sets_statement_timeout(self):
-        ingest._last_mv_refresh_at = None
-        conn = Mock()
-        conn.transaction.return_value = MagicMock()
-        cursor_context = MagicMock()
-        cursor = cursor_context.__enter__.return_value
-        conn.cursor.return_value = cursor_context
+    def test_update_bike_last_status_is_monotonic(self):
+        cur = Mock()
+        fetched_at = datetime.now(timezone.utc)
 
-        with patch.object(ingest, "MATERIALIZED_VIEWS", ()):
-            ingest.maybe_refresh_materialized_views(
-                conn,
-                datetime.now(timezone.utc),
-                interval=300,
-                timeout=12,
-            )
+        ingest.update_bike_last_status(cur, 42, fetched_at)
 
-        cursor.execute.assert_called_once_with(
-            "SELECT set_config('statement_timeout', %s, true)",
-            ("12s",),
-        )
+        query, params = cur.execute.call_args.args
+        self.assertIn("ON CONFLICT (bike_number) DO UPDATE", query)
+        self.assertIn("bike_last_status.fetched_at < EXCLUDED.fetched_at", query)
+        self.assertEqual(params, (42, fetched_at))
 
 
 if __name__ == "__main__":

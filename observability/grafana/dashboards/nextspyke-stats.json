@@ -13,7 +13,7 @@
       "title": "Total Bikes",
       "id": 1,
       "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -28,7 +28,7 @@
       "title": "Active Bikes (15m)",
       "id": 2,
       "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -40,15 +40,15 @@
     },
     {
       "type": "stat",
-      "title": "Total Places",
+      "title": "Official Stations",
       "id": 3,
       "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT COUNT(*) AS value FROM place"
+          "rawSql": "SELECT COUNT(*) AS value FROM place WHERE spot IS TRUE"
         }
       ],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
@@ -58,7 +58,7 @@
       "title": "Last Snapshot Age (s)",
       "id": 4,
       "gridPos": { "h": 4, "w": 5, "x": 14, "y": 0 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -73,7 +73,7 @@
       "title": "Trips Total",
       "id": 5,
       "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -88,7 +88,7 @@
       "title": "Reserved Bikes (latest)",
       "id": 23,
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 4 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -103,7 +103,7 @@
       "title": "Available Bikes (latest)",
       "id": 24,
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 4 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -118,7 +118,7 @@
       "title": "In Use (estimated)",
       "id": 25,
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -133,7 +133,7 @@
       "title": "Inactive Bikes (latest)",
       "id": 26,
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 4 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -148,7 +148,7 @@
       "title": "Booked Bikes Avg (30m)",
       "id": 27,
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -163,7 +163,7 @@
       "title": "Booked Bikes Max (30m)",
       "id": 28,
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -178,7 +178,7 @@
       "title": "Snapshots w/ Booked Bikes (30m)",
       "id": 29,
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -194,7 +194,7 @@
       "title": "Out of Service (active=false)",
       "id": 30,
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -209,7 +209,7 @@
       "title": "Trips per Hour",
       "id": 6,
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 12 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -223,7 +223,7 @@
       "title": "Avg Trip Distance (m)",
       "id": 7,
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 12 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -237,7 +237,7 @@
       "title": "Avg Trip Duration (min)",
       "id": 8,
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 19 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -251,12 +251,12 @@
       "title": "City Activity (bikes seen)",
       "id": 9,
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 19 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT $__timeGroup(hour, '1h') AS time, city_name AS metric, SUM(bikes_seen) AS value FROM mv_city_bikes_hourly WHERE $__timeFilter(hour) GROUP BY 1, 2 ORDER BY 1"
+          "rawSql": "SELECT $__timeGroupAlias(cs.fetched_at, '1h'), c.name AS metric, AVG(cs.available_bikes)::double precision AS value FROM city_status cs JOIN city c ON c.city_uid = cs.city_uid WHERE $__timeFilter(cs.fetched_at) GROUP BY 1, 2 ORDER BY 1"
         }
       ]
     },
@@ -265,7 +265,7 @@
       "title": "Hotspots (last 24h)",
       "id": 10,
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 26 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -297,7 +297,7 @@
       "title": "Activity by Hour of Day",
       "id": 11,
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 26 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -315,12 +315,12 @@
       "title": "Top Routes",
       "id": 12,
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT start_place, end_place, trips, avg_distance_m, avg_duration_s FROM mv_routes_top ORDER BY trips DESC LIMIT 10"
+          "rawSql": "SELECT COALESCE(ps.name, 'Free-floating') AS start_location, COALESCE(pe.name, 'Free-floating') AS end_location, COUNT(*) AS trips, AVG(bm.distance_m)::int AS avg_distance_m, AVG(bm.duration_seconds)::int AS avg_duration_s FROM bike_movement bm LEFT JOIN place ps ON ps.place_uid = bm.start_place_uid LEFT JOIN place pe ON pe.place_uid = bm.end_place_uid WHERE $__timeFilter(bm.end_fetched_at) AND bm.distance_m >= 60 GROUP BY 1, 2 ORDER BY trips DESC LIMIT 10"
         }
       ]
     },
@@ -329,12 +329,12 @@
       "title": "Longest Dwell (bikes standing)",
       "id": 13,
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT bike_number, place_name, (dwell_seconds / 60) AS dwell_minutes FROM mv_bike_dwell ORDER BY dwell_seconds DESC LIMIT 20"
+          "rawSql": "SELECT bls.bike_number, COALESCE(p.name, 'Free-floating') AS location_name, (EXTRACT(EPOCH FROM (bls.fetched_at - COALESCE(last_move.end_fetched_at, b.first_seen_at))) / 60)::int AS dwell_minutes FROM bike_last_status bls JOIN bike b ON b.bike_number = bls.bike_number LEFT JOIN place p ON p.place_uid = bls.place_uid LEFT JOIN LATERAL (SELECT bm.end_fetched_at FROM bike_movement bm WHERE bm.bike_number = bls.bike_number ORDER BY bm.end_fetched_at DESC LIMIT 1) last_move ON TRUE ORDER BY dwell_minutes DESC LIMIT 20"
         }
       ]
     },
@@ -343,7 +343,7 @@
       "title": "Trip Distance Distribution (m)",
       "id": 14,
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 43 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -361,7 +361,7 @@
       "title": "Trip Duration Distribution (s)",
       "id": 15,
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 43 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -379,7 +379,7 @@
       "title": "Snapshots per Hour",
       "id": 16,
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 50 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -393,7 +393,7 @@
       "title": "Activity by Weekday/Hour",
       "id": 17,
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 50 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -407,7 +407,7 @@
       "title": "Start/End Bias (top net ends)",
       "id": 18,
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 57 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -421,7 +421,7 @@
       "title": "Rebalancing Suspects",
       "id": 19,
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 57 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -435,7 +435,7 @@
       "title": "Trips per Day",
       "id": 20,
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 65 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -449,12 +449,12 @@
       "title": "OD Matrix (Top 50)",
       "id": 21,
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 65 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT start_place, end_place, trips, avg_distance_m, avg_duration_s FROM mv_routes_top ORDER BY trips DESC LIMIT 50"
+          "rawSql": "SELECT COALESCE(ps.name, 'Free-floating') AS start_location, COALESCE(pe.name, 'Free-floating') AS end_location, COUNT(*) AS trips, AVG(bm.distance_m)::int AS avg_distance_m, AVG(bm.duration_seconds)::int AS avg_duration_s FROM bike_movement bm LEFT JOIN place ps ON ps.place_uid = bm.start_place_uid LEFT JOIN place pe ON pe.place_uid = bm.end_place_uid WHERE $__timeFilter(bm.end_fetched_at) AND bm.distance_m >= 60 GROUP BY 1, 2 ORDER BY trips DESC LIMIT 50"
         }
       ]
     },
@@ -463,7 +463,7 @@
       "title": "Top Routes (Flow Map)",
       "id": 22,
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 73 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -493,7 +493,7 @@
       "title": "Bike States (latest snapshot)",
       "id": 31,
       "gridPos": { "h": 7, "w": 24, "x": 0, "y": 82 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -507,7 +507,7 @@
       "title": "Missing Snapshots (24h)",
       "id": 32,
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 89 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -522,7 +522,7 @@
       "title": "Last Gap (s)",
       "id": 33,
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 89 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -537,7 +537,7 @@
       "title": "Snapshot Gaps (max seconds)",
       "id": 34,
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 93 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",
@@ -551,7 +551,7 @@
       "title": "Longest Snapshot Gaps",
       "id": 35,
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 93 },
-      "datasource": { "type": "postgres", "uid": "postgres" },
+      "datasource": { "type": "postgres", "uid": "nextspyke-postgres" },
       "targets": [
         {
           "refId": "A",

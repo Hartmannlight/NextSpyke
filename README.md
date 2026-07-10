@@ -55,8 +55,8 @@ services:
       POLL_INTERVAL_SECONDS: 60
       FETCH_ZONES: "true"
       STORE_RAW_JSON: "true"
-      MOVEMENT_MIN_DISTANCE_METERS: 10
-      REFRESH_MV_INTERVAL_SECONDS: 300
+      MOVEMENT_MIN_DISTANCE_METERS: 60
+      REFRESH_MV_INTERVAL_SECONDS: 0
       REFRESH_MV_TIMEOUT_SECONDS: 30
       METRICS_ENABLED: "true"
       METRICS_PORT: 8000
@@ -106,8 +106,8 @@ services:
       POLL_INTERVAL_SECONDS: 60
       FETCH_ZONES: "true"
       STORE_RAW_JSON: "true"
-      MOVEMENT_MIN_DISTANCE_METERS: 10
-      REFRESH_MV_INTERVAL_SECONDS: 300
+      MOVEMENT_MIN_DISTANCE_METERS: 60
+      REFRESH_MV_INTERVAL_SECONDS: 0
       REFRESH_MV_TIMEOUT_SECONDS: 30
       METRICS_ENABLED: "true"
       METRICS_PORT: 8000
@@ -202,9 +202,9 @@ If you already run your own instances, you can plug NextSpyke into them:
 - `FETCH_ZONES` (default `true`)
 - `FETCH_GBFS` (default `true`)
 - `STORE_RAW_JSON` (default `true`)
-- `MOVEMENT_MIN_DISTANCE_METERS` (default `10`, filters GPS noise for free bikes)
-- `REFRESH_MV_INTERVAL_SECONDS` (default `0`, set e.g. `300` to refresh materialized views)
-- `REFRESH_MV_TIMEOUT_SECONDS` (default `30`, limits each materialized-view statement)
+- `MOVEMENT_MIN_DISTANCE_METERS` (default and minimum `60`, filters GPS jitter)
+- `REFRESH_MV_INTERVAL_SECONDS` (deprecated and ignored; keep at `0`)
+- `REFRESH_MV_TIMEOUT_SECONDS` (deprecated and ignored)
 - `SERVICE_NAME` (default `nextspyke`)
 - `APP_ENV` (default `dev`)
 - `APP_VERSION` (default `0.1.0`)
@@ -259,22 +259,35 @@ docker compose down -v
 docker compose up --build
 ```
 
-## Grafana materialized views
+## Bike locations and stations
 
-Refresh the precomputed views when needed:
+Only API places with `spot=true` are stored as official stations. Free-floating
+bike coordinates are stored in `bike_status.geom` and in the compact
+`bike_last_status` table, so a slightly different parking coordinate does not
+create a new station. Existing non-station rows in `place` can remain for
+historical foreign keys; current dashboards exclude them.
 
-```sql
-REFRESH MATERIALIZED VIEW mv_hotspots_hourly;
-REFRESH MATERIALIZED VIEW mv_city_bikes_hourly;
-REFRESH MATERIALIZED VIEW mv_routes_top;
-REFRESH MATERIALIZED VIEW mv_bike_dwell;
-```
+Materialized full-history views are intentionally not refreshed by the collector.
+They made poll duration grow with database size and are removed by the schema
+migration. Dashboard queries use bounded time windows and the compact latest-state
+table instead.
+
+After upgrading an existing database, the first successful poll initializes
+`bike_last_status` and intentionally emits no movement rows. Movement detection
+continues normally from the following poll without scanning or backfilling history.
 
 ## Movement backfill
 
-Rebuild missing movement rows from the stored bike sightings after changing the
-movement threshold or upgrading an existing database:
+Rebuild missing movement rows from stored bike sightings when explicitly needed.
+The command scans the full history and can take a long time on production-sized
+databases; it is not part of normal startup:
 
 ```bash
 python -m nextspyke.app backfill-movements
 ```
+
+## Production cleanup
+
+After deploying this version, use the
+[production data cleanup](docs/PRODUCTION_DATA_CLEANUP.md) during a database
+maintenance window to remove legacy pseudo-stations and movements below 60 metres.

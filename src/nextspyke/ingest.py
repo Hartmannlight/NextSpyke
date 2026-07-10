@@ -4,7 +4,6 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import psycopg
-from psycopg import sql
 from psycopg.types.json import Json
 
 from nextspyke.config import AppConfig
@@ -16,15 +15,6 @@ ZONE_BASE_URL = "https://zone-service.nextbikecloud.net/v1/zones/city/{city_id}"
 FLEXZONE_URL = "https://api.nextbike.net/reservation/geojson/flexzone_{domain}.json"
 GBFS_ROOT_URL = "https://gbfs.nextbike.net/maps/gbfs/v2/{system_id}/gbfs.json"
 
-MATERIALIZED_VIEWS = (
-    "mv_hotspots_hourly",
-    "mv_city_bikes_hourly",
-    "mv_routes_top",
-    "mv_bike_dwell",
-)
-
-_last_mv_refresh_at: datetime | None = None
-
 
 def fetch_json(url: str, params: dict | None = None) -> dict:
     if params:
@@ -33,29 +23,6 @@ def fetch_json(url: str, params: dict | None = None) -> dict:
     with urlopen(request, timeout=30) as response:
         payload = response.read().decode("utf-8")
     return json.loads(payload)
-
-
-def maybe_refresh_materialized_views(
-    conn: psycopg.Connection,
-    now: datetime,
-    interval: int,
-    timeout: int,
-) -> None:
-    global _last_mv_refresh_at
-    if interval <= 0:
-        return
-    if _last_mv_refresh_at and (now - _last_mv_refresh_at).total_seconds() < interval:
-        return
-    with conn.transaction():
-        with conn.cursor() as cur:
-            if timeout > 0:
-                cur.execute(
-                    "SELECT set_config('statement_timeout', %s, true)",
-                    (f"{timeout}s",),
-                )
-            for view in MATERIALIZED_VIEWS:
-                cur.execute(sql.SQL("REFRESH MATERIALIZED VIEW {}").format(sql.Identifier(view)))
-    _last_mv_refresh_at = now
 
 
 def log_optional_failure(config: AppConfig, source: str, exc: BaseException) -> None:
@@ -166,6 +133,8 @@ def upsert_cities(cur: psycopg.Cursor, domain: str, cities: list[dict]) -> None:
 
 def upsert_places(cur: psycopg.Cursor, city_uid: int, places: list[dict]) -> None:
     for place in places:
+        if place.get("spot") is not True:
+            continue
         cur.execute(
             """
             INSERT INTO place (
@@ -289,6 +258,8 @@ def insert_place_status(
 ) -> None:
     rows = []
     for place in places:
+        if place.get("spot") is not True:
+            continue
         rows.append(
             (
                 snapshot_id,
@@ -405,18 +376,6 @@ def insert_bike_movements(
             FROM bike_status
             WHERE snapshot_id = %s AND fetched_at = %s
         ),
-        prev AS (
-            SELECT DISTINCT ON (bs.bike_number)
-                bs.bike_number,
-                bs.snapshot_id,
-                bs.fetched_at,
-                bs.place_uid,
-                bs.geom
-            FROM bike_status bs
-            JOIN current c ON c.bike_number = bs.bike_number
-            WHERE NOT (bs.snapshot_id = %s AND bs.fetched_at = %s)
-            ORDER BY bs.bike_number, bs.fetched_at DESC
-        ),
         pairs AS (
             SELECT
                 c.bike_number,
@@ -432,11 +391,11 @@ def insert_bike_movements(
                 ps.spot AS start_spot,
                 pe.spot AS end_spot
             FROM current c
-            JOIN prev p ON p.bike_number = c.bike_number
+            JOIN bike_last_status p ON p.bike_number = c.bike_number
             LEFT JOIN place ps ON ps.place_uid = p.place_uid
             LEFT JOIN place pe ON pe.place_uid = c.place_uid
-            WHERE c.place_uid IS NOT NULL
-              AND p.place_uid IS NOT NULL
+            WHERE c.geom IS NOT NULL
+              AND p.geom IS NOT NULL
         )
         INSERT INTO bike_movement (
             bike_number,
@@ -473,21 +432,51 @@ def insert_bike_movements(
                 ELSE 60
             END,
             CASE
-                WHEN start_place_uid <> end_place_uid THEN 'place_change'
+                WHEN start_spot IS TRUE
+                 AND end_spot IS TRUE
+                 AND start_place_uid IS DISTINCT FROM end_place_uid
+                THEN 'station_change'
                 ELSE 'coordinate_change'
             END
         FROM pairs
-        WHERE start_place_uid <> end_place_uid
-           OR (
-                start_place_uid = end_place_uid
-                AND start_spot IS NOT TRUE
-                AND distance_m >= %s
-           )
+        WHERE distance_m >= %s
         ON CONFLICT DO NOTHING
         """,
-        (snapshot_id, fetched_at, snapshot_id, fetched_at, min_distance_m),
+        (snapshot_id, fetched_at, min_distance_m),
     )
     return cur.rowcount or 0
+
+
+def update_bike_last_status(
+    cur: psycopg.Cursor,
+    snapshot_id: int,
+    fetched_at: datetime,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO bike_last_status (
+            bike_number, snapshot_id, fetched_at, place_uid, geom, active, state,
+            pedelec_battery, battery_pack_pct, battery_range_km
+        )
+        SELECT
+            bike_number, snapshot_id, fetched_at, place_uid, geom, active, state,
+            pedelec_battery, battery_pack_pct, battery_range_km
+        FROM bike_status
+        WHERE snapshot_id = %s AND fetched_at = %s
+        ON CONFLICT (bike_number) DO UPDATE SET
+            snapshot_id = EXCLUDED.snapshot_id,
+            fetched_at = EXCLUDED.fetched_at,
+            place_uid = EXCLUDED.place_uid,
+            geom = EXCLUDED.geom,
+            active = EXCLUDED.active,
+            state = EXCLUDED.state,
+            pedelec_battery = EXCLUDED.pedelec_battery,
+            battery_pack_pct = EXCLUDED.battery_pack_pct,
+            battery_range_km = EXCLUDED.battery_range_km
+        WHERE bike_last_status.fetched_at < EXCLUDED.fetched_at
+        """,
+        (snapshot_id, fetched_at),
+    )
 
 
 def backfill_bike_movements(cur: psycopg.Cursor, min_distance_m: float) -> int:
@@ -522,8 +511,8 @@ def backfill_bike_movements(cur: psycopg.Cursor, min_distance_m: float) -> int:
             LEFT JOIN place ps ON ps.place_uid = o.start_place_uid
             LEFT JOIN place pe ON pe.place_uid = o.end_place_uid
             WHERE o.start_snapshot_id IS NOT NULL
-              AND o.start_place_uid IS NOT NULL
-              AND o.end_place_uid IS NOT NULL
+              AND o.start_geom IS NOT NULL
+              AND o.end_geom IS NOT NULL
         )
         INSERT INTO bike_movement (
             bike_number,
@@ -560,16 +549,14 @@ def backfill_bike_movements(cur: psycopg.Cursor, min_distance_m: float) -> int:
                 ELSE 60
             END,
             CASE
-                WHEN start_place_uid <> end_place_uid THEN 'place_change'
+                WHEN start_spot IS TRUE
+                 AND end_spot IS TRUE
+                 AND start_place_uid IS DISTINCT FROM end_place_uid
+                THEN 'station_change'
                 ELSE 'coordinate_change'
             END
         FROM pairs
-        WHERE start_place_uid <> end_place_uid
-           OR (
-                start_place_uid = end_place_uid
-                AND start_spot IS NOT TRUE
-                AND distance_m >= %s
-           )
+        WHERE distance_m >= %s
         ON CONFLICT DO NOTHING
         """,
         (min_distance_m,),
@@ -695,20 +682,6 @@ def refresh_vehicle_type_metadata(conn: psycopg.Connection, config: AppConfig) -
             raise
 
 
-def refresh_materialized_views(conn: psycopg.Connection, config: AppConfig, now: datetime) -> None:
-    try:
-        maybe_refresh_materialized_views(
-            conn,
-            now,
-            config.refresh_mv_interval,
-            config.refresh_mv_timeout,
-        )
-    except Exception as exc:
-        log_optional_failure(config, "materialized_views", exc)
-        if is_connection_failure(exc):
-            raise
-
-
 def ingest_once(conn: psycopg.Connection, config: AppConfig) -> dict:
     fetched_at = utc_now()
     live_data = fetch_json(LIVE_BASE_URL, {"domains": config.domain})
@@ -746,9 +719,10 @@ def ingest_once(conn: psycopg.Connection, config: AppConfig) -> dict:
             for city in cities:
                 insert_city_status(cur, snapshot_id, fetched_at, city)
                 places = city.get("places") or []
-                upsert_places(cur, city.get("uid"), places)
-                insert_place_status(cur, snapshot_id, fetched_at, places)
-                place_count += len(places)
+                stations = [place for place in places if place.get("spot") is True]
+                upsert_places(cur, city.get("uid"), stations)
+                insert_place_status(cur, snapshot_id, fetched_at, stations)
+                place_count += len(stations)
                 for place in places:
                     for bike in place.get("bike_list") or []:
                         bike_number = bike.get("number")
@@ -778,7 +752,7 @@ def ingest_once(conn: psycopg.Connection, config: AppConfig) -> dict:
                                 snapshot_id,
                                 fetched_at,
                                 bike_number,
-                                place.get("uid"),
+                                place.get("uid") if place.get("spot") is True else None,
                                 bike.get("active"),
                                 bike.get("state"),
                                 bike.get("pedelec_battery"),
@@ -799,10 +773,10 @@ def ingest_once(conn: psycopg.Connection, config: AppConfig) -> dict:
                 fetched_at,
                 config.movement_min_distance_m,
             )
+            update_bike_last_status(cur, snapshot_id, fetched_at)
 
     refresh_zone_metadata(conn, config)
     refresh_vehicle_type_metadata(conn, config)
-    refresh_materialized_views(conn, config, fetched_at)
     return {
         "snapshot_id": snapshot_id,
         "fetched_at": fetched_at,
