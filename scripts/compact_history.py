@@ -14,17 +14,32 @@ sys.path.insert(0, str(ROOT / "src"))
 from nextspyke.db import build_dsn
 
 
-def compact_day(conn, day: date, domain: str, *, apply=False, purge_raw=False):
-    if day >= datetime.now(timezone.utc).date():
-        raise ValueError("Only completed UTC days can be compacted")
+def compact_day(
+    conn,
+    day: date,
+    domain: str,
+    *,
+    apply=False,
+    purge_raw=False,
+    online=False,
+    allow_current_day=False,
+):
+    now = datetime.now(timezone.utc)
+    if day > now.date() or (day == now.date() and not allow_current_day):
+        raise ValueError("Only completed UTC days can be compacted by default")
     start = datetime.combine(day, time(), timezone.utc)
     end = start + timedelta(days=1)
+    if online and end > now - timedelta(minutes=5):
+        raise ValueError("Online compaction requires a UTC day closed for at least five minutes")
     try:
         with conn.cursor() as cur:
             cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             cur.execute("SET LOCAL lock_timeout = '10s'")
-            # Coordinate with the collector and other cleanup processes.
-            cur.execute("SELECT pg_advisory_xact_lock(20260914, 1)")
+            # Maintenance jobs always serialize. Closed daily runs cannot be extended
+            # by live polls, so online maintenance need not block the collector.
+            cur.execute("SELECT pg_advisory_xact_lock(20260914, 2)")
+            if not online:
+                cur.execute("SELECT pg_advisory_xact_lock(20260914, 1)")
             script = Path(__file__).with_suffix(".sql").read_text(encoding="utf-8")
             # Psycopg extended queries cannot prepare multiple parameterized commands.
             statements = script.split(";")
@@ -96,12 +111,13 @@ def compact_day(conn, day: date, domain: str, *, apply=False, purge_raw=False):
                     ) SELECT * FROM compact_runs
                 """)
                 # A latest-state row may still point into this day after collector downtime.
-                cur.execute("""
+                if not online:
+                    cur.execute("""
                     UPDATE bike_last_status l SET history_snapshot_id = r.snapshot_id,
                         history_fetched_at = r.fetched_at
                     FROM compact_runs r WHERE l.bike_number = r.bike_number
                       AND l.snapshot_id = r.last_snapshot_id AND l.fetched_at = r.last_seen_at
-                """)
+                    """)
                 if purge_raw:
                     cur.execute(
                         """
@@ -138,11 +154,29 @@ def main():
     parser.add_argument("--domain", default="fg")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--purge-raw", action="store_true")
+    parser.add_argument(
+        "--online",
+        action="store_true",
+        help="Do not block the live collector; only closed UTC days are allowed",
+    )
+    parser.add_argument(
+        "--allow-current-day",
+        action="store_true",
+        help="Compact today's existing data; stop the collector before using this",
+    )
     args = parser.parse_args()
     with psycopg.connect(build_dsn()) as conn:
         print(
             json.dumps(
-                compact_day(conn, args.day, args.domain, apply=args.apply, purge_raw=args.purge_raw)
+                compact_day(
+                    conn,
+                    args.day,
+                    args.domain,
+                    apply=args.apply,
+                    purge_raw=args.purge_raw,
+                    online=args.online,
+                    allow_current_day=args.allow_current_day,
+                )
             )
         )
 
