@@ -29,12 +29,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN groupadd --gid 10001 nextspyke \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 nextspyke \
     && useradd --uid 10001 --gid nextspyke --no-create-home nextspyke
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --chown=nextspyke:nextspyke schema.sql /app/schema.sql
 COPY --chown=nextspyke:nextspyke src /app/src
+
+# The runtime only needs the locked application dependencies, not pip or its
+# separately vendored build libraries. Keep package installers in the builder.
+RUN /usr/local/bin/python -m pip uninstall --yes pip \
+    && /app/.venv/bin/python -m pip uninstall --yes pip
 
 LABEL org.opencontainers.image.title="NextSpyke" \
       org.opencontainers.image.description="Collect and store Nextbike live data for movement and availability analysis." \
