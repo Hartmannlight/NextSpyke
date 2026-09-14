@@ -41,7 +41,9 @@ aktuellen Sichtungszeiten. Bewegungen verwenden weiterhin die letzte Sichtung
 vor der Ortsänderung. Historische Bewegungszeilen bleiben unverändert. Der
 explizite Bewegungs-Backfill verwendet bei Intervallen deren letzte Sichtung.
 
-Ein Transaktions-Advisory-Lock serialisiert Collector und Bereinigung. Historische
+Ein Transaktions-Advisory-Lock serialisiert Bereinigungsjobs; standardmaessig
+wird auch der Collector gesperrt. `--online` laesst ihn fuer abgeschlossene Tage
+weiterlaufen und aktualisiert keine Live-Zustandszeiger. Historische
 Intervallenden werden weiterhin aktualisiert: Autovacuum bleibt notwendig, und
 die Maßnahme reduziert nicht sämtliche Schreiblast oder WAL. Endpunkte sind
 nicht zusätzlich indiziert; PostgreSQL kann passende Aktualisierungen als HOT
@@ -124,9 +126,14 @@ wieder unverändert gegen komprimierte Historie eingesetzt werden.
    Ein Tag wird atomar verarbeitet, wiederholte Ausführung ist möglich.
    Vor jeder Änderung werden Original und Rekonstruktion mit `EXCEPT ALL` in
    beiden Richtungen verglichen, einschließlich Koordinaten und Zustandsfeldern.
-   Fehler rollen den gesamten Tag zurück. Die Bereinigung hält den Collector-Lock
-   während des Tageslaufs; bei langen Laufzeiten ist ein Wartungsfenster sinnvoll.
-   Der aktuelle UTC-Tag wird abgelehnt. Die zwei Skriptdateien müssen gemeinsam
+   Fehler rollen den gesamten Tag zurück. Standardmaessig haelt die Bereinigung
+   den Collector-Lock waehrend des Tageslaufs. Mit `--online` koennen seit mindestens
+   fuenf Minuten abgeschlossene UTC-Tage ohne Collector-Unterbrechung verarbeitet
+   werden: neue Beobachtungen starten taeglich neue Intervalle. Keine historischen
+   Backfill-Schreiber parallel betreiben. Fuer den aktuellen UTC-Tag zuerst den
+   Collector stoppen und ausdruecklich `--allow-current-day` verwenden; danach
+   wieder starten. Dieser Modus aktualisiert auch die Intervallzeiger des letzten
+   Zustands und ist nicht mit `--online` kombinierbar. Die zwei Skriptdateien müssen gemeinsam
    auf dem Rechner mit Datenbankzugriff liegen; sie werden nicht ins App-Image kopiert.
 
 4. Weitere Tage einzeln verarbeiten, Bericht und Laufzeiten prüfen. Zunächst

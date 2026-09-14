@@ -453,6 +453,12 @@ class TestDbIntegration(unittest.TestCase):
             self.conn.rollback()
             result = compact_day(self.conn, day.date(), "legacy-test", apply=True)
             self.assertEqual((result["before"], result["after"]), (2, 2))
+            # Closed-day maintenance must work even while a live collector holds
+            # its ingest lock; its current-day pointers are never changed here.
+            with psycopg.connect(db.build_dsn()) as collector:
+                collector.execute("SELECT pg_advisory_xact_lock(20260914, 1)")
+                result = compact_day(self.conn, day.date(), "legacy-test", apply=True, online=True)
+                self.assertEqual((result["before"], result["after"]), (2, 2))
         finally:
             self.conn.rollback()
             self.conn.execute(
