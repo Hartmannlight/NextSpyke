@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7 AS builder
+FROM python:3.13-slim-bookworm@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e AS builder
 
 ARG POETRY_VERSION=2.1.3
 
@@ -14,7 +14,7 @@ RUN python -m pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 COPY pyproject.toml poetry.lock /app/
 RUN poetry sync --only main --no-root --no-interaction
 
-FROM python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7 AS runtime
+FROM python:3.13-slim-bookworm@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e AS runtime
 
 ARG VERSION=0.1.0
 ARG VCS_REF=unknown
