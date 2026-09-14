@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7 AS builder
+FROM python:3.13-slim-bookworm@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e AS builder
 
 ARG POETRY_VERSION=2.1.3
 
@@ -14,7 +14,7 @@ RUN python -m pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 COPY pyproject.toml poetry.lock /app/
 RUN poetry sync --only main --no-root --no-interaction
 
-FROM python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7 AS runtime
+FROM python:3.13-slim-bookworm@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e AS runtime
 
 ARG VERSION=0.1.0
 ARG VCS_REF=unknown
@@ -29,12 +29,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN groupadd --gid 10001 nextspyke \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 nextspyke \
     && useradd --uid 10001 --gid nextspyke --no-create-home nextspyke
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --chown=nextspyke:nextspyke schema.sql /app/schema.sql
 COPY --chown=nextspyke:nextspyke src /app/src
+
+# The runtime only needs the locked application dependencies, not pip or its
+# separately vendored build libraries. Keep package installers in the builder.
+RUN /usr/local/bin/python -m pip uninstall --yes pip \
+    && /app/.venv/bin/python -m pip uninstall --yes pip
 
 LABEL org.opencontainers.image.title="NextSpyke" \
       org.opencontainers.image.description="Collect and store Nextbike live data for movement and availability analysis." \

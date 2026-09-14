@@ -589,7 +589,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT fetched_at AS \"time\", COUNT(*)::double precision AS \"Bikes seen\" FROM bike_status WHERE $__timeFilter(fetched_at) GROUP BY fetched_at ORDER BY fetched_at;",
+          "rawSql": "SELECT fetched_at AS \"time\", COUNT(*)::double precision AS \"Bikes seen\" FROM bike_status_samples($__timeFrom(), $__timeTo()) WHERE $__timeFilter(fetched_at) GROUP BY fetched_at ORDER BY fetched_at;",
           "refId": "A"
         },
         {
@@ -1278,7 +1278,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  bs.fetched_at AS \"time\",\n  COUNT(DISTINCT bs.bike_number)::double precision AS \"Bikes in Mathebau\"\nFROM bike_status bs\nWHERE $__timeFilter(bs.fetched_at)\n  AND bs.geom IS NOT NULL\n  AND ST_Within(\n    bs.geom,\n    ST_SetSRID(\n      ST_GeomFromGeoJSON('{\"type\":\"Polygon\",\"coordinates\":[[[8.4083365,49.0110833],[8.4092336,49.0103876],[8.4100989,49.0109599],[8.4102355,49.0112964],[8.4099816,49.0114499],[8.4092958,49.0117946],[8.4090766,49.0115885],[8.4085742,49.0112439],[8.4085614,49.011236],[8.4083365,49.0110833]]]}'),\n      4326\n    )\n  )\nGROUP BY bs.fetched_at\nORDER BY bs.fetched_at;",
+          "rawSql": "SELECT\n  bs.fetched_at AS \"time\",\n  COUNT(DISTINCT bs.bike_number)::double precision AS \"Bikes in Mathebau\"\nFROM bike_status_samples($__timeFrom(), $__timeTo()) bs\nWHERE $__timeFilter(bs.fetched_at)\n  AND bs.geom IS NOT NULL\n  AND ST_Within(\n    bs.geom,\n    ST_SetSRID(\n      ST_GeomFromGeoJSON('{\"type\":\"Polygon\",\"coordinates\":[[[8.4083365,49.0110833],[8.4092336,49.0103876],[8.4100989,49.0109599],[8.4102355,49.0112964],[8.4099816,49.0114499],[8.4092958,49.0117946],[8.4090766,49.0115885],[8.4085742,49.0112439],[8.4085614,49.011236],[8.4083365,49.0110833]]]}'),\n      4326\n    )\n  )\nGROUP BY bs.fetched_at\nORDER BY bs.fetched_at;",
           "refId": "A"
         }
       ],

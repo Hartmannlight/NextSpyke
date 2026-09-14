@@ -9,7 +9,9 @@ can explore usage patterns, hotspots, and city-level trends over time.
 docker compose up --build
 ```
 
-Defaults are set for Karlsruhe (`domain=fg`, `city_id=21`). Change via env vars in
+Defaults collect all cities in the region (`domain=fg`), including Karlsruhe,
+Bruchsal and Baden-Baden. `city_id=21` selects optional Karlsruhe zone metadata
+and does not filter the status import. Change via env vars in
 `docker-compose.yml` if needed.
 
 Grafana is available on `http://localhost:3000` (user/pass: `grafana`/`grafana`).
@@ -54,7 +56,7 @@ services:
       NEXTBIKE_CITY_ID: 21
       POLL_INTERVAL_SECONDS: 60
       FETCH_ZONES: "true"
-      STORE_RAW_JSON: "true"
+      STORE_RAW_JSON: "false"
       MOVEMENT_MIN_DISTANCE_METERS: 60
       REFRESH_MV_INTERVAL_SECONDS: 0
       REFRESH_MV_TIMEOUT_SECONDS: 30
@@ -105,7 +107,7 @@ services:
       NEXTBIKE_CITY_ID: 21
       POLL_INTERVAL_SECONDS: 60
       FETCH_ZONES: "true"
-      STORE_RAW_JSON: "true"
+      STORE_RAW_JSON: "false"
       MOVEMENT_MIN_DISTANCE_METERS: 60
       REFRESH_MV_INTERVAL_SECONDS: 0
       REFRESH_MV_TIMEOUT_SECONDS: 30
@@ -197,11 +199,11 @@ If you already run your own instances, you can plug NextSpyke into them:
 ## Useful environment variables
 
 - `NEXTBIKE_DOMAIN` (default `fg`)
-- `NEXTBIKE_CITY_ID` (default `21`)
+- `NEXTBIKE_CITY_ID` (optional zone metadata only; Compose: `21`, Karlsruhe; status import includes all cities in `NEXTBIKE_DOMAIN`)
 - `POLL_INTERVAL_SECONDS` (default `60`)
 - `FETCH_ZONES` (default `true`)
 - `FETCH_GBFS` (default `true`)
-- `STORE_RAW_JSON` (default `true`)
+- `STORE_RAW_JSON` (default `false`; enable only for temporary debugging)
 - `MOVEMENT_MIN_DISTANCE_METERS` (default and minimum `60`, filters GPS jitter)
 - `REFRESH_MV_INTERVAL_SECONDS` (deprecated and ignored; keep at `0`)
 - `REFRESH_MV_TIMEOUT_SECONDS` (deprecated and ignored)
@@ -287,6 +289,11 @@ python -m nextspyke.app backfill-movements
 ```
 
 ## Production cleanup
+
+For lossless bike-history compaction, raw JSON removal, and the required Grafana
+query changes, see [Storage compaction](docs/STORAGE_COMPACTION.md). Historical
+`bike_status` rows now represent observation intervals within one UTC day; use
+`bike_status_samples(from_timestamp, to_timestamp)` to query original sightings.
 
 After deploying this version, use the
 [production data cleanup](docs/PRODUCTION_DATA_CLEANUP.md) during a database

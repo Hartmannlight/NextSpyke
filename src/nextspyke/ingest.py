@@ -289,11 +289,18 @@ def insert_place_status(
 
 
 def insert_bike_status(cur: psycopg.Cursor, snapshot_id: int, bike_rows: list[tuple]) -> None:
+    # A transaction-local full observation feeds movement detection and latest state.
+    # Only the durable history is run-length encoded; live timestamps stay exact.
+    cur.execute("""
+        CREATE TEMP TABLE IF NOT EXISTS current_bike_status
+        (LIKE bike_status INCLUDING DEFAULTS) ON COMMIT DELETE ROWS
+    """)
+    cur.execute("TRUNCATE pg_temp.current_bike_status")
     if not bike_rows:
         return
     cur.executemany(
         """
-        INSERT INTO bike_status (
+        INSERT INTO pg_temp.current_bike_status (
             snapshot_id, fetched_at, bike_number, place_uid, active, state, pedelec_battery,
             battery_pack_pct, battery_range_km, geom
         )
@@ -304,6 +311,36 @@ def insert_bike_status(cur: psycopg.Cursor, snapshot_id: int, bike_rows: list[tu
         """,
         bike_rows,
     )
+    cur.execute("""
+        UPDATE pg_temp.current_bike_status c
+        SET last_seen_at = c.fetched_at, last_snapshot_id = c.snapshot_id,
+            fetched_at = p.history_fetched_at, snapshot_id = p.history_snapshot_id
+        FROM bike_last_status p, snapshot current_snapshot
+        WHERE c.bike_number = p.bike_number
+          AND current_snapshot.snapshot_id = c.snapshot_id
+          AND current_snapshot.fetched_at = c.fetched_at
+          AND p.history_fetched_at IS NOT NULL
+          AND p.history_snapshot_id IS NOT NULL
+          AND p.fetched_at = (
+              SELECT s.fetched_at FROM snapshot s
+              WHERE s.domain = current_snapshot.domain AND s.fetched_at < c.fetched_at
+              ORDER BY s.fetched_at DESC LIMIT 1
+          )
+          AND (p.history_fetched_at AT TIME ZONE 'UTC')::date =
+              (c.fetched_at AT TIME ZONE 'UTC')::date
+          AND ROW(c.place_uid, c.active, c.state, c.pedelec_battery,
+                  c.battery_pack_pct, c.battery_range_km, ST_AsEWKB(c.geom))
+              IS NOT DISTINCT FROM
+              ROW(p.place_uid, p.active, p.state, p.pedelec_battery,
+                  p.battery_pack_pct, p.battery_range_km, ST_AsEWKB(p.geom))
+    """)
+    cur.execute("""
+        INSERT INTO bike_status
+        SELECT * FROM pg_temp.current_bike_status WHERE TRUE
+        ON CONFLICT (snapshot_id, bike_number, fetched_at) DO UPDATE
+        SET last_seen_at = EXCLUDED.last_seen_at,
+            last_snapshot_id = EXCLUDED.last_snapshot_id
+    """)
 
 
 def insert_snapshot(
@@ -372,9 +409,11 @@ def insert_bike_movements(
     cur.execute(
         """
         WITH current AS (
-            SELECT bike_number, snapshot_id, fetched_at, place_uid, geom
-            FROM bike_status
-            WHERE snapshot_id = %s AND fetched_at = %s
+            SELECT bike_number, COALESCE(last_snapshot_id, snapshot_id) AS snapshot_id,
+                   COALESCE(last_seen_at, fetched_at) AS fetched_at, place_uid, geom
+            FROM pg_temp.current_bike_status
+            WHERE COALESCE(last_snapshot_id, snapshot_id) = %s
+              AND COALESCE(last_seen_at, fetched_at) = %s
         ),
         pairs AS (
             SELECT
@@ -456,13 +495,16 @@ def update_bike_last_status(
         """
         INSERT INTO bike_last_status (
             bike_number, snapshot_id, fetched_at, place_uid, geom, active, state,
-            pedelec_battery, battery_pack_pct, battery_range_km
+            pedelec_battery, battery_pack_pct, battery_range_km,
+            history_snapshot_id, history_fetched_at
         )
         SELECT
-            bike_number, snapshot_id, fetched_at, place_uid, geom, active, state,
-            pedelec_battery, battery_pack_pct, battery_range_km
-        FROM bike_status
-        WHERE snapshot_id = %s AND fetched_at = %s
+            bike_number, COALESCE(last_snapshot_id, snapshot_id),
+            COALESCE(last_seen_at, fetched_at), place_uid, geom, active, state,
+            pedelec_battery, battery_pack_pct, battery_range_km, snapshot_id, fetched_at
+        FROM pg_temp.current_bike_status
+        WHERE COALESCE(last_snapshot_id, snapshot_id) = %s
+          AND COALESCE(last_seen_at, fetched_at) = %s
         ON CONFLICT (bike_number) DO UPDATE SET
             snapshot_id = EXCLUDED.snapshot_id,
             fetched_at = EXCLUDED.fetched_at,
@@ -472,7 +514,9 @@ def update_bike_last_status(
             state = EXCLUDED.state,
             pedelec_battery = EXCLUDED.pedelec_battery,
             battery_pack_pct = EXCLUDED.battery_pack_pct,
-            battery_range_km = EXCLUDED.battery_range_km
+            battery_range_km = EXCLUDED.battery_range_km,
+            history_snapshot_id = EXCLUDED.history_snapshot_id,
+            history_fetched_at = EXCLUDED.history_fetched_at
         WHERE bike_last_status.fetched_at < EXCLUDED.fetched_at
         """,
         (snapshot_id, fetched_at),
@@ -489,8 +533,8 @@ def backfill_bike_movements(cur: psycopg.Cursor, min_distance_m: float) -> int:
                 bs.fetched_at AS end_fetched_at,
                 bs.place_uid AS end_place_uid,
                 bs.geom AS end_geom,
-                LAG(bs.snapshot_id) OVER sighting AS start_snapshot_id,
-                LAG(bs.fetched_at) OVER sighting AS start_fetched_at,
+                LAG(COALESCE(bs.last_snapshot_id, bs.snapshot_id)) OVER sighting AS start_snapshot_id,
+                LAG(COALESCE(bs.last_seen_at, bs.fetched_at)) OVER sighting AS start_fetched_at,
                 LAG(bs.place_uid) OVER sighting AS start_place_uid,
                 LAG(bs.geom) OVER sighting AS start_geom
             FROM bike_status bs
@@ -690,10 +734,14 @@ def ingest_once(conn: psycopg.Connection, config: AppConfig) -> dict:
         raise RuntimeError("No country data returned from live API")
 
     cities = country.get("cities") or []
+    # Keep the complete regional fleet. city_id selects optional zone metadata,
+    # not the cities included in status history.
     raw_json = live_data if config.store_raw_json else None
 
     with conn.transaction():
         with conn.cursor() as cur:
+            # Serialize writers: the previous observation must remain stable until commit.
+            cur.execute("SELECT pg_advisory_xact_lock(20260914, 1)")
             ensure_partitions(cur, fetched_at)
             upsert_country(cur, country)
             upsert_cities(cur, country.get("domain") or config.domain, cities)

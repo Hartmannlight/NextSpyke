@@ -204,7 +204,34 @@ ALTER TABLE place_status
   ADD COLUMN IF NOT EXISTS bike_types JSONB;
 
 ALTER TABLE bike_status
-  ADD COLUMN IF NOT EXISTS battery_range_km DOUBLE PRECISION;
+  ADD COLUMN IF NOT EXISTS battery_range_km DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS last_snapshot_id BIGINT;
+
+ALTER TABLE bike_last_status
+  ADD COLUMN IF NOT EXISTS history_snapshot_id BIGINT,
+  ADD COLUMN IF NOT EXISTS history_fetched_at TIMESTAMPTZ;
+
+-- NULL endpoints identify legacy single observations. Runs never cross UTC days.
+-- Expand only a bounded requested time range, at actual successful polls (no guessed cadence).
+CREATE OR REPLACE FUNCTION bike_status_samples(range_start TIMESTAMPTZ, range_end TIMESTAMPTZ)
+RETURNS TABLE (
+  snapshot_id BIGINT, fetched_at TIMESTAMPTZ, bike_number TEXT, place_uid INTEGER,
+  active BOOLEAN, state TEXT, pedelec_battery INTEGER, battery_pack_pct INTEGER,
+  battery_range_km DOUBLE PRECISION, geom GEOMETRY(Point, 4326)
+)
+LANGUAGE SQL STABLE AS $$
+  SELECT s.snapshot_id, s.fetched_at, h.bike_number, h.place_uid,
+         h.active, h.state, h.pedelec_battery, h.battery_pack_pct,
+         h.battery_range_km, h.geom
+  FROM bike_status h
+  JOIN snapshot anchor ON anchor.snapshot_id = h.snapshot_id AND anchor.fetched_at = h.fetched_at
+  JOIN snapshot s ON s.domain = anchor.domain
+    AND s.fetched_at BETWEEN h.fetched_at AND COALESCE(h.last_seen_at, h.fetched_at)
+  WHERE h.fetched_at >= date_trunc('day', range_start AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+    AND h.fetched_at <= range_end
+    AND s.fetched_at BETWEEN range_start AND range_end
+$$;
 
 ALTER TABLE bike_movement
   ADD COLUMN IF NOT EXISTS movement_reason TEXT NOT NULL DEFAULT 'place_change';
