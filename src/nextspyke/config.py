@@ -62,7 +62,7 @@ def load_config() -> AppConfig:
     poll_interval = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
     fetch_zones = env_bool("FETCH_ZONES", True)
     fetch_gbfs = env_bool("FETCH_GBFS", True)
-    store_raw_json = env_bool("STORE_RAW_JSON", True)
+    store_raw_json = env_bool("STORE_RAW_JSON", False)
     movement_min_distance_m = max(
         60.0,
         float(os.getenv("MOVEMENT_MIN_DISTANCE_METERS", "60")),

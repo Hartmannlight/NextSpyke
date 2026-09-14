@@ -33,7 +33,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT COUNT(DISTINCT bike_number) AS value FROM bike_status WHERE fetched_at >= NOW() - INTERVAL '15 minutes'"
+          "rawSql": "SELECT COUNT(DISTINCT bike_number) AS value FROM bike_last_status WHERE fetched_at >= NOW() - INTERVAL '15 minutes'"
         }
       ],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
@@ -123,7 +123,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "WITH latest AS (SELECT MAX(fetched_at) AS ts FROM bike_status), totals AS (SELECT COUNT(DISTINCT bike_number) AS total FROM bike_status bs JOIN latest l ON bs.fetched_at = l.ts), city AS (SELECT COALESCE(SUM(available_bikes), 0) AS available, COALESCE(SUM(booked_bikes), 0) AS booked FROM city_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM city_status)) SELECT GREATEST(totals.total - city.available - city.booked, 0) AS value FROM totals, city"
+          "rawSql": "WITH latest AS (SELECT MAX(fetched_at) AS ts FROM snapshot), totals AS (SELECT COUNT(DISTINCT bike_number) AS total FROM bike_last_status bs JOIN latest l ON bs.fetched_at = l.ts), city AS (SELECT COALESCE(SUM(available_bikes), 0) AS available, COALESCE(SUM(booked_bikes), 0) AS booked FROM city_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM city_status)) SELECT GREATEST(totals.total - city.available - city.booked, 0) AS value FROM totals, city"
         }
       ],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
@@ -138,7 +138,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT COUNT(*) AS value FROM bike_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM bike_status) AND active IS FALSE"
+          "rawSql": "SELECT COUNT(*) AS value FROM bike_last_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM snapshot) AND active IS FALSE"
         }
       ],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
@@ -199,7 +199,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT COUNT(*) AS value FROM bike_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM bike_status) AND active IS FALSE"
+          "rawSql": "SELECT COUNT(*) AS value FROM bike_last_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM snapshot) AND active IS FALSE"
         }
       ],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
@@ -270,7 +270,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT p.lat AS latitude, p.lng AS longitude, p.name AS place, COUNT(DISTINCT bs.bike_number) AS value FROM bike_status bs JOIN place p ON p.place_uid = bs.place_uid WHERE bs.fetched_at >= NOW() - INTERVAL '24 hours' GROUP BY 1, 2, 3"
+          "rawSql": "SELECT p.lat AS latitude, p.lng AS longitude, p.name AS place, COUNT(DISTINCT bs.bike_number) AS value FROM bike_status_samples(NOW() - INTERVAL '24 hours', NOW()) bs JOIN place p ON p.place_uid = bs.place_uid WHERE bs.fetched_at >= NOW() - INTERVAL '24 hours' GROUP BY 1, 2, 3"
         }
       ],
       "options": {
@@ -302,7 +302,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT EXTRACT(HOUR FROM fetched_at) AS hour, COUNT(DISTINCT bike_number) AS bikes_seen FROM bike_status WHERE $__timeFilter(fetched_at) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT EXTRACT(HOUR FROM fetched_at) AS hour, COUNT(DISTINCT bike_number) AS bikes_seen FROM bike_status_samples($__timeFrom(), $__timeTo()) WHERE $__timeFilter(fetched_at) GROUP BY 1 ORDER BY 1"
         }
       ],
       "options": {
@@ -398,7 +398,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT EXTRACT(DOW FROM fetched_at) AS dow, EXTRACT(HOUR FROM fetched_at) AS hour, COUNT(DISTINCT bike_number) AS bikes_seen FROM bike_status WHERE $__timeFilter(fetched_at) GROUP BY 1, 2 ORDER BY 1, 2"
+          "rawSql": "SELECT EXTRACT(DOW FROM fetched_at) AS dow, EXTRACT(HOUR FROM fetched_at) AS hour, COUNT(DISTINCT bike_number) AS bikes_seen FROM bike_status_samples($__timeFrom(), $__timeTo()) WHERE $__timeFilter(fetched_at) GROUP BY 1, 2 ORDER BY 1, 2"
         }
       ]
     },
@@ -498,7 +498,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT COALESCE(state, 'unknown') AS state, COUNT(*) AS bikes FROM bike_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM bike_status) GROUP BY 1 ORDER BY 2 DESC"
+          "rawSql": "SELECT COALESCE(state, 'unknown') AS state, COUNT(*) AS bikes FROM bike_last_status WHERE fetched_at = (SELECT MAX(fetched_at) FROM snapshot) GROUP BY 1 ORDER BY 2 DESC"
         }
       ]
     },

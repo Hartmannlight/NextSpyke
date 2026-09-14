@@ -46,6 +46,9 @@ class DummyTransaction:
 
 
 class DummyCursor:
+    def execute(self, *args):
+        pass
+
     def __enter__(self):
         return self
 
@@ -137,6 +140,12 @@ class TestApp(unittest.TestCase):
         self.assertEqual(loaded.refresh_mv_timeout, 12)
         self.assertEqual(loaded.movement_min_distance_m, 60)
 
+    def test_raw_json_is_opt_in(self):
+        with EnvGuard(STORE_RAW_JSON=None):
+            self.assertFalse(config.load_config().store_raw_json)
+        with EnvGuard(STORE_RAW_JSON="true"):
+            self.assertTrue(config.load_config().store_raw_json)
+
     def test_fetch_json(self):
         payload = {"ok": True, "value": 3}
         response = DummyResponse(json.dumps(payload).encode("utf-8"))
@@ -162,7 +171,7 @@ class TestApp(unittest.TestCase):
                 {
                     "domain": "fg",
                     "name": "KVV.nextbike",
-                    "cities": [{"uid": 21, "places": []}],
+                    "cities": [{"uid": 21, "places": []}, {"uid": 99, "places": []}],
                 }
             ]
         }
@@ -197,7 +206,7 @@ class TestApp(unittest.TestCase):
             result = ingest.ingest_once(DummyConn(), sample_config())
 
         self.assertEqual(result["snapshot_id"], 42)
-        self.assertEqual(result["cities"], 1)
+        self.assertEqual(result["cities"], 2)
         self.assertEqual(result["places"], 0)
         self.assertEqual(result["bikes"], 0)
         self.assertEqual(result["movements"], 0)

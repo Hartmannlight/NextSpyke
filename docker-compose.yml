@@ -27,10 +27,11 @@ services:
       PGUSER: nextspyke
       PGPASSWORD: nextspyke
       NEXTBIKE_DOMAIN: fg
+      # Zone metadata only; status history includes every city in domain fg.
       NEXTBIKE_CITY_ID: 21
       POLL_INTERVAL_SECONDS: 60
       FETCH_ZONES: "true"
-      STORE_RAW_JSON: "true"
+      STORE_RAW_JSON: "false"
       MOVEMENT_MIN_DISTANCE_METERS: 60
       REFRESH_MV_INTERVAL_SECONDS: 0
       REFRESH_MV_TIMEOUT_SECONDS: 30

@@ -868,7 +868,8 @@ class TestIngestCoverage(unittest.TestCase):
                                                                             result = ingest.ingest_once(
                                                                                 conn,
                                                                                 sample_config(
-                                                                                    store_raw_json=False
+                                                                                    store_raw_json=False,
+                                                                                    city_id=None,
                                                                                 ),
                                                                             )
         self.assertEqual(result["snapshot_id"], 9)
