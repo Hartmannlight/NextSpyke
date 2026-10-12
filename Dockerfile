@@ -30,7 +30,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 \
+    && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 nextspyke \
     && useradd --uid 10001 --gid nextspyke --no-create-home nextspyke
